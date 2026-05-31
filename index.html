@@ -174,6 +174,40 @@
       transition: width .25s ease;
     }
 
+    /* ── Visit counters ─────────────────────── */
+    .counter-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .counter-card {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #101010;
+      padding: 10px;
+    }
+    .counter-label {
+      font-size: .62rem;
+      color: var(--muted);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+    .counter-value {
+      margin-top: 6px;
+      font-size: 1rem;
+      color: var(--text);
+      font-weight: 700;
+    }
+
+    .notice {
+      font-size: .62rem;
+      color: var(--muted);
+      letter-spacing: .04em;
+      line-height: 1.5;
+      border-left: 1px solid var(--border2);
+      padding-left: 10px;
+    }
+
     /* ── Button ──────────────────────────────── */
     .btn-row {
       display: flex;
@@ -208,6 +242,11 @@
       color: var(--muted);
     }
     #clearBtn:hover { color: var(--text); background: var(--border); }
+    #resetStatsBtn {
+      background: transparent;
+      color: var(--muted);
+    }
+    #resetStatsBtn:hover { color: var(--text); background: var(--border); }
 
     /* ── Console ─────────────────────────────── */
     .console-panel {
@@ -272,13 +311,22 @@
       color: var(--muted);
       letter-spacing: .1em;
     }
+
+    @media (max-width: 700px) {
+      .row {
+        flex-direction: column;
+      }
+      .counter-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
 
   <header>
     <h1>ChroniumX</h1>
-    <p>Automated site visitor &mdash; max 100 &bull; min 5</p>
+    <p>Traffic Tester &mdash; max 100 &bull; min 5</p>
     <p style="font-size:.6rem;color:var(--muted);margin-top:3px;letter-spacing:.06em;">ChroniumX</p>
   </header>
 
@@ -305,6 +353,12 @@
         </div>
       </div>
 
+      <div class="field">
+        <label>Real Visits Baseline</label>
+        <input type="number" id="realInput" min="0" value="0" />
+        <div class="hint">Set this to your real analytics count (human visits)</div>
+      </div>
+
       <!-- Status bar -->
       <div class="status-wrap">
         <div class="status-label">
@@ -315,9 +369,29 @@
         </div>
       </div>
 
+      <div class="counter-grid">
+        <div class="counter-card">
+          <div class="counter-label">Real Visits</div>
+          <div class="counter-value" id="realCount">0</div>
+        </div>
+        <div class="counter-card">
+          <div class="counter-label">Test/Bot Visits</div>
+          <div class="counter-value" id="botCount">0</div>
+        </div>
+        <div class="counter-card">
+          <div class="counter-label">Total Visits</div>
+          <div class="counter-value" id="totalCount">0</div>
+        </div>
+      </div>
+
+      <div class="notice">
+        Test/Bot visits are tracked separately. They are not treated as verified human traffic.
+      </div>
+
       <div class="btn-row">
         <button id="startBtn">&#9654;&nbsp; Start</button>
         <button id="clearBtn">Clear Console</button>
+        <button id="resetStatsBtn">Reset Counters</button>
       </div>
 
     </div>
@@ -340,16 +414,23 @@
   const urlInput   = document.getElementById('urlInput');
   const countInput = document.getElementById('countInput');
   const delayInput = document.getElementById('delayInput');
+  const realInput  = document.getElementById('realInput');
   const startBtn   = document.getElementById('startBtn');
   const clearBtn   = document.getElementById('clearBtn');
+  const resetStatsBtn = document.getElementById('resetStatsBtn');
   const consoleEl  = document.getElementById('console');
   const barFill    = document.getElementById('barFill');
   const statusText = document.getElementById('statusText');
   const lineCount  = document.getElementById('lineCount');
   const emptyMsg   = document.getElementById('emptyMsg');
+  const realCountEl = document.getElementById('realCount');
+  const botCountEl  = document.getElementById('botCount');
+  const totalCountEl = document.getElementById('totalCount');
 
   let running = false;
   let logLines = 0;
+  const STATS_KEY = 'chroniumx.visitStats.v1';
+  let visitStats = { real: 0, bot: 0 };
 
   /* ── Helpers ─────────────────────────────── */
   function timestamp() {
@@ -407,12 +488,38 @@
     return new Promise(r => setTimeout(r, ms));
   }
 
+  function loadStats() {
+    try {
+      const raw = localStorage.getItem(STATS_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (typeof parsed.real === 'number' && typeof parsed.bot === 'number') {
+        visitStats.real = Math.max(0, Math.floor(parsed.real));
+        visitStats.bot = Math.max(0, Math.floor(parsed.bot));
+      }
+    } catch {
+      visitStats = { real: 0, bot: 0 };
+    }
+  }
+
+  function saveStats() {
+    localStorage.setItem(STATS_KEY, JSON.stringify(visitStats));
+  }
+
+  function renderStats() {
+    const total = visitStats.real + visitStats.bot;
+    realCountEl.textContent = String(visitStats.real);
+    botCountEl.textContent = String(visitStats.bot);
+    totalCountEl.textContent = String(total);
+    realInput.value = String(visitStats.real);
+  }
+
   /* ── Hidden iframe container ───────────────── */
   const iframeBox = document.createElement('div');
   iframeBox.style.cssText = 'position:fixed;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;top:-9999px;left:-9999px;';
   document.body.appendChild(iframeBox);
 
-  /* ── Send visit via real iframe load ──────── */
+  /* ── Send test visit via iframe load ───────── */
   function sendVisit(url, index, total) {
     return new Promise((resolve) => {
       log(`Sending visit ${index} of ${total}  →  ${url}`, 'sent');
@@ -423,10 +530,13 @@
 
       const done = (status) => {
         const ms = Math.round(performance.now() - start);
+        visitStats.bot += 1;
+        saveStats();
+        renderStats();
         if (status === 'ok') {
-          log(`Visit ${index} loaded  (${ms} ms)`, 'success');
+          log(`Test visit ${index} loaded  (${ms} ms)`, 'success');
         } else {
-          log(`Visit ${index} timed out / blocked  (${ms} ms)`, 'warn');
+          log(`Test visit ${index} timed out / blocked  (${ms} ms)`, 'warn');
         }
         iframe.remove();
         resolve();
@@ -473,10 +583,11 @@
     setProgress(0, count);
 
     log('─'.repeat(48), 'dim');
-    log(`Session started`, 'dim');
+    log(`Session started (test traffic mode)`, 'dim');
     log(`Target   :  ${url}`, 'url');
-    log(`Visits   :  ${count}`, 'num');
+    log(`Test hits:  ${count}`, 'num');
     log(`Delay    :  ${delay} ms`, 'num');
+    log(`Real base:  ${visitStats.real}`, 'num');
     log('─'.repeat(48), 'dim');
 
     for (let i = 1; i <= count; i++) {
@@ -490,7 +601,8 @@
     }
 
     log('─'.repeat(48), 'dim');
-    log(`Session complete  —  ${count} visit${count !== 1 ? 's' : ''} sent.`, 'success');
+    log(`Session complete  —  ${count} test visit${count !== 1 ? 's' : ''} sent.`, 'success');
+    log(`Totals now  —  real ${visitStats.real}, bot ${visitStats.bot}, total ${visitStats.real + visitStats.bot}`, 'num');
     log('─'.repeat(48), 'dim');
 
     running = false;
@@ -510,12 +622,30 @@
     if (!running) startBtn.disabled = false;
   });
 
+  resetStatsBtn.addEventListener('click', () => {
+    visitStats = { real: 0, bot: 0 };
+    saveStats();
+    renderStats();
+    log('Visit counters reset to 0.', 'warn');
+  });
+
+  realInput.addEventListener('change', () => {
+    const v = Math.max(0, parseInt(realInput.value, 10) || 0);
+    visitStats.real = v;
+    saveStats();
+    renderStats();
+    log(`Real visits baseline set to ${v}.`, 'num');
+  });
+
   /* clamp inputs live */
   countInput.addEventListener('change', () => {
     let v = parseInt(countInput.value, 10);
     if (v < 5)   countInput.value = 5;
     if (v > 100) countInput.value = 100;
   });
+
+  loadStats();
+  renderStats();
 </script>
 </body>
 </html>
