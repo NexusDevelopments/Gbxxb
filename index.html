@@ -1516,20 +1516,20 @@
 
     const lineTask = (async () => {
       for (const line of lines) {
-        await wait(220);
+        await wait(360);
         line.classList.add('visible');
       }
     })();
 
-    await wait(120);
-    await typeBootText(bootTitle, 'WELCOME!', 68);
-    await wait(120);
-    await typeBootText(bootSubtitle, 'Entering ChroniumX terminal...', 26);
+    await wait(320);
+    await typeBootText(bootTitle, 'WELCOME!', 110);
+    await wait(260);
+    await typeBootText(bootSubtitle, 'Entering ChroniumX terminal...', 40);
     await lineTask;
-    await wait(520);
+    await wait(1800);
 
     bootScreen.classList.add('hidden');
-    await wait(820);
+    await wait(1200);
     document.body.style.overflow = '';
   }
 
