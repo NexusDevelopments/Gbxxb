@@ -940,6 +940,7 @@
   <div class="app-tabs" role="tablist" aria-label="Main pages">
     <button class="app-tab-btn active" id="tabSettings" data-page="settings" type="button">Settings</button>
     <button class="app-tab-btn" id="tabFiles" data-page="files" type="button">File Manager</button>
+    <button class="app-tab-btn" id="tabPreview" data-page="preview" type="button">Live Preview</button>
     <button class="app-tab-btn" id="tabConsole" data-page="console" type="button">Console</button>
     <button class="app-tab-btn updates" id="tabUpdates" data-page="updates" type="button">Updates</button>
   </div>
@@ -1117,14 +1118,30 @@
       <div id="fileList" style="width:38%;min-width:220px;border-right:1px solid var(--border);padding:10px;overflow:auto;"></div>
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
         <div id="sourceMeta" style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:.68rem;color:var(--muted);word-break:break-all;">Source URL: -</div>
-        <div class="viewer-toolbar">
-          <button id="viewSourceBtn" class="mini-btn active" type="button">Source</button>
-          <button id="viewPreviewBtn" class="mini-btn" type="button">Live Preview</button>
-          <span class="preview-status" id="previewStatus">Preview ready</span>
-        </div>
         <pre id="sourceView" style="margin:0;padding:14px;font-size:.76rem;line-height:1.6;overflow:auto;flex:1;color:var(--c-info);background:#101010;">Select a scraped file to view its source.</pre>
-        <iframe id="livePreview" class="preview-frame" title="Live preview" hidden></iframe>
       </div>
+    </div>
+  </div>
+  </section>
+
+  <section class="app-page" id="pagePreview" hidden>
+  <div class="page-loader" aria-live="polite" aria-busy="true">
+    <div class="page-loader-card">
+      <span class="page-loader-spin" aria-hidden="true"></span>
+      <span>Loading Live Preview...</span>
+    </div>
+  </div>
+  <div class="panel console-panel">
+    <div class="panel-title">
+      <span>Live Preview</span>
+      <span class="badge" id="previewRoute">/preview</span>
+    </div>
+    <div id="previewMeta" style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:.68rem;color:var(--muted);word-break:break-all;">No code scraped yet.</div>
+    <div class="viewer-toolbar" style="border-bottom:0;">
+      <span class="preview-status" id="previewStatus" style="margin-left:0;">No code scraped yet.</span>
+    </div>
+    <div style="border-top:1px solid var(--border);min-height:320px;height:56vh;max-height:72vh;overflow:hidden;">
+      <iframe id="livePreview" class="preview-frame" title="Live preview"></iframe>
     </div>
   </div>
   </section>
@@ -1146,7 +1163,7 @@
         <div class="updates-item">Improved mobile layout and stacked file manager for smaller screens.</div>
         <div class="updates-item">Added folder tree grouping plus per-file/folder/site export options.</div>
         <div class="updates-item">Added live crawl progress updates during scrape.</div>
-        <div class="updates-item">Added Live Preview mode in File Manager to render scraped HTML pages.</div>
+        <div class="updates-item">Moved Live Preview into its own dedicated tab with empty-state handling when no code is scraped.</div>
       </div>
     </div>
   </div>
@@ -1197,10 +1214,12 @@
   const siteSelectEl = document.getElementById('siteSelect');
   const tabSettings = document.getElementById('tabSettings');
   const tabFiles = document.getElementById('tabFiles');
+  const tabPreview = document.getElementById('tabPreview');
   const tabConsole = document.getElementById('tabConsole');
   const tabUpdates = document.getElementById('tabUpdates');
   const pageSettings = document.getElementById('pageSettings');
   const pageFiles = document.getElementById('pageFiles');
+  const pagePreview = document.getElementById('pagePreview');
   const pageConsole = document.getElementById('pageConsole');
   const pageUpdates = document.getElementById('pageUpdates');
   const wizardInfo = document.getElementById('wizardInfo');
@@ -1228,8 +1247,8 @@
   const totalCountEl = document.getElementById('totalCount');
   const fileListEl = document.getElementById('fileList');
   const sourceViewEl = document.getElementById('sourceView');
-  const viewSourceBtn = document.getElementById('viewSourceBtn');
-  const viewPreviewBtn = document.getElementById('viewPreviewBtn');
+  const previewMetaEl = document.getElementById('previewMeta');
+  const previewRouteEl = document.getElementById('previewRoute');
   const previewStatusEl = document.getElementById('previewStatus');
   const livePreviewEl = document.getElementById('livePreview');
   const sourceMetaEl = document.getElementById('sourceMeta');
@@ -1241,7 +1260,7 @@
 
   let running = false;
   let logLines = 0;
-  const APP_VERSION = 'v.2.4.0';
+  const APP_VERSION = 'v.2.5.0';
   const PREFS_KEY = 'chroniumx.scraperPrefs.v1';
   let currentStorageKey = 'sourcevault.scrapes.v1';
   let wizardStep = 1;
@@ -1252,7 +1271,6 @@
     selectedFiles: new Set(),
     liveProgress: null,
     searchTerm: '',
-    viewMode: 'source',
   };
   let pageLoadTimer = null;
   let pageLoadToken = 0;
@@ -1279,6 +1297,7 @@
   function pageElementForName(pageName) {
     if (pageName === 'settings') return pageSettings;
     if (pageName === 'files') return pageFiles;
+    if (pageName === 'preview') return pagePreview;
     if (pageName === 'console') return pageConsole;
     if (pageName === 'updates') return pageUpdates;
     return null;
@@ -1288,16 +1307,19 @@
     const { withLoader = true } = options;
     const showSettings = pageName === 'settings';
     const showFiles = pageName === 'files';
+    const showPreview = pageName === 'preview';
     const showConsole = pageName === 'console';
     const showUpdates = pageName === 'updates';
 
     pageSettings.hidden = !showSettings;
     pageFiles.hidden = !showFiles;
+    pagePreview.hidden = !showPreview;
     pageConsole.hidden = !showConsole;
     pageUpdates.hidden = !showUpdates;
 
     tabSettings.classList.toggle('active', showSettings);
     tabFiles.classList.toggle('active', showFiles);
+    tabPreview.classList.toggle('active', showPreview);
     tabConsole.classList.toggle('active', showConsole);
     tabUpdates.classList.toggle('active', showUpdates);
 
@@ -1548,6 +1570,10 @@
       return { mode: 'updates', slug: null, filePath: null };
     }
 
+    if (parts[0] === 'preview') {
+      return { mode: 'preview', slug: null, filePath: null };
+    }
+
     if (parts.length === 0) return { slug: null, filePath: null };
     return { mode: 'scrape', slug: parts[0], filePath: parts.slice(1).join('/') || null };
   }
@@ -1621,6 +1647,17 @@
     return scrape && scrape.files ? scrape.files : {};
   }
 
+  function ensureActiveScrapeAndFile() {
+    if (!state.activeSlug || !state.scrapes[state.activeSlug]) {
+      state.activeSlug = Object.keys(state.scrapes).sort()[0] || null;
+    }
+
+    const files = filesForActive();
+    if (!state.activeFilePath || !currentFile()) {
+      state.activeFilePath = files[0] ? files[0].path : null;
+    }
+  }
+
   function clearLivePreviewResources() {
     if (previewBlobUrl) {
       URL.revokeObjectURL(previewBlobUrl);
@@ -1634,16 +1671,6 @@
 
   function setPreviewStatus(message) {
     previewStatusEl.textContent = message;
-  }
-
-  function setViewerMode(mode) {
-    state.viewMode = mode === 'preview' ? 'preview' : 'source';
-    const showPreview = state.viewMode === 'preview';
-
-    viewSourceBtn.classList.toggle('active', !showPreview);
-    viewPreviewBtn.classList.toggle('active', showPreview);
-    sourceViewEl.hidden = showPreview;
-    livePreviewEl.hidden = !showPreview;
   }
 
   function normalizeFilePath(path) {
@@ -1734,14 +1761,17 @@
 
   function renderLivePreview(file) {
     clearLivePreviewResources();
+    previewRouteEl.textContent = '/preview';
 
     if (!file) {
-      setPreviewStatus('Select a file to preview.');
-      renderPreviewMessage('Select a scraped file to view a live preview.');
+      previewMetaEl.textContent = 'No code scraped yet.';
+      setPreviewStatus('No code scraped yet.');
+      renderPreviewMessage('No code scraped yet.');
       return;
     }
 
     if (String(file.type || '').toLowerCase() !== 'html') {
+      previewMetaEl.textContent = `Current file: ${file.path}`;
       setPreviewStatus('Live Preview is available for HTML files only.');
       renderPreviewMessage('This file type cannot be rendered as a full page preview. Open an HTML file to use Live Preview.');
       return;
@@ -1752,7 +1782,25 @@
     previewBlobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
     livePreviewEl.removeAttribute('srcdoc');
     livePreviewEl.src = previewBlobUrl;
+    previewMetaEl.textContent = `Preview Source: ${file.sourceUrl || file.path}`;
+    previewRouteEl.textContent = state.activeSlug
+      ? (state.activeFilePath
+        ? `/preview/${encodeURIComponent(state.activeSlug)}/${state.activeFilePath}`
+        : `/preview/${encodeURIComponent(state.activeSlug)}`)
+      : '/preview';
     setPreviewStatus(`Previewing ${file.path}`);
+  }
+
+  function renderPreviewPanel() {
+    if (Object.keys(state.scrapes).length === 0) {
+      state.activeSlug = null;
+      state.activeFilePath = null;
+      renderLivePreview(null);
+      return;
+    }
+
+    ensureActiveScrapeAndFile();
+    renderLivePreview(currentFile());
   }
 
   function buildFileTree(files) {
@@ -1889,11 +1937,8 @@
       activeRouteEl.textContent = '/';
       sourceMetaEl.textContent = 'Source URL: -';
       sourceViewEl.textContent = 'Select a scraped file to view its source.';
-      clearLivePreviewResources();
-      livePreviewEl.removeAttribute('src');
-      renderPreviewMessage('Select a scraped site and HTML file to open Live Preview.');
-      setPreviewStatus('Preview ready');
       searchCountEl.textContent = '0 results';
+      renderPreviewPanel();
       return;
     }
 
@@ -1921,20 +1966,13 @@
     if (!activeFile) {
       sourceMetaEl.textContent = 'Source URL: -';
       sourceViewEl.textContent = 'Pick a file from the list to view its content.';
-      clearLivePreviewResources();
-      livePreviewEl.removeAttribute('src');
-      renderPreviewMessage('Pick an HTML file to render it in Live Preview.');
-      setPreviewStatus('Preview ready');
+      renderPreviewPanel();
       return;
     }
 
     sourceMetaEl.textContent = `Source URL: ${activeFile.sourceUrl || '-'}`;
     sourceViewEl.textContent = activeFile.content || '';
-    if (state.viewMode === 'preview') {
-      renderLivePreview(activeFile);
-    } else {
-      setPreviewStatus('Preview ready');
-    }
+    renderPreviewPanel();
   }
 
   function renderTreeNode(node, container, pathParts) {
@@ -2064,13 +2102,11 @@
     state.activeSlug = null;
     state.activeFilePath = null;
     state.searchTerm = '';
-    state.viewMode = 'source';
     searchInput.value = '';
     clearLivePreviewResources();
     livePreviewEl.removeAttribute('src');
-    renderPreviewMessage('Select a scraped site and HTML file to open Live Preview.');
-    setViewerMode('source');
-    setPreviewStatus('Preview ready');
+    renderPreviewMessage('No code scraped yet.');
+    setPreviewStatus('No code scraped yet.');
     resetSelections();
     setProgress(0, 0);
     switchPage('settings');
@@ -2093,6 +2129,14 @@
 
     if (mode === 'updates') {
       switchPage('updates');
+      return;
+    }
+
+    if (mode === 'preview') {
+      switchPage('preview');
+      renderSiteSelect();
+      renderCounters();
+      renderFileManager();
       return;
     }
 
@@ -2405,6 +2449,11 @@
       switchPage('files');
     }
   });
+  tabPreview.addEventListener('click', () => {
+    history.pushState({}, '', '/preview');
+    switchPage('preview');
+    renderPreviewPanel();
+  });
   tabConsole.addEventListener('click', () => {
     history.pushState({}, '', '/');
     switchPage('console');
@@ -2462,17 +2511,6 @@
     const manifest = buildManifest(scrape);
     downloadBlob(JSON.stringify(manifest, null, 2), `${sanitizeDownloadName(scrape.slug || 'scrape')}-manifest.json`, 'application/json;charset=utf-8');
     log(`Downloaded manifest for ${scrape.slug}.`, 'success');
-  });
-
-  viewSourceBtn.addEventListener('click', () => {
-    setViewerMode('source');
-    setPreviewStatus('Preview ready');
-  });
-
-  viewPreviewBtn.addEventListener('click', () => {
-    setViewerMode('preview');
-    const file = currentFile();
-    renderLivePreview(file);
   });
 
   clearBtn.addEventListener('click', () => {
@@ -2608,9 +2646,8 @@
   currentStorageKey = safeStorageKey();
   state.scrapes = loadScrapes(currentStorageKey);
   updatesVersion.textContent = `Version: ${APP_VERSION}`;
-  setViewerMode('source');
-  renderPreviewMessage('Select a scraped site and HTML file to open Live Preview.');
-  setPreviewStatus('Preview ready');
+  renderPreviewMessage('No code scraped yet.');
+  setPreviewStatus('No code scraped yet.');
   log('ChroniumX initialized in scraper mode.', 'dim');
   switchPage('settings', { withLoader: false });
   setWizardStep(1);
