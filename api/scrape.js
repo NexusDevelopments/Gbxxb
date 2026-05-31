@@ -1,6 +1,7 @@
 const MAX_PAGES = 25;
 const MAX_ASSETS = 250;
 const MAX_FILE_CHARS = 200_000;
+const MAX_RENDER_SNAPSHOT_CHARS = 160_000;
 const MAX_TOTAL_CHARS = 2_000_000;
 const FETCH_TIMEOUT_MS = 12_000;
 const RENDER_TIMEOUT_MS = 20_000;
@@ -236,27 +237,64 @@ async function fetchRenderedHtml(url) {
 
 async function fetchPageHtml(url, renderJs, warnings) {
   const initial = await fetchText(url);
+  const shellDetected = detectShellHtml(initial.text);
+
   if (!renderJs) {
-    return { text: initial.text, rendered: false };
+    return {
+      text: initial.text,
+      originalText: initial.text,
+      renderedText: null,
+      rendered: false,
+      renderSource: "disabled",
+      shellDetected,
+    };
   }
 
-  if (!detectShellHtml(initial.text)) {
-    return { text: initial.text, rendered: false };
+  if (!shellDetected) {
+    return {
+      text: initial.text,
+      originalText: initial.text,
+      renderedText: null,
+      rendered: false,
+      renderSource: "not-needed",
+      shellDetected,
+    };
   }
 
   try {
     const rendered = await fetchRenderedHtml(url);
-    return { text: rendered.text, rendered: true };
+    return {
+      text: initial.text,
+      originalText: initial.text,
+      renderedText: rendered.text,
+      rendered: true,
+      renderSource: "primary",
+      shellDetected,
+    };
   } catch (error) {
     warnings.push(`Primary renderer fallback skipped for ${url}: ${error.message}`);
   }
 
   try {
     const snapshot = await fetchProxyRenderedSnapshot(url);
-    return { text: snapshot.text, rendered: true };
+    return {
+      text: initial.text,
+      originalText: initial.text,
+      renderedText: snapshot.text,
+      rendered: true,
+      renderSource: "proxy",
+      shellDetected,
+    };
   } catch (error) {
     warnings.push(`Proxy renderer fallback skipped for ${url}: ${error.message}`);
-    return { text: initial.text, rendered: false };
+    return {
+      text: initial.text,
+      originalText: initial.text,
+      renderedText: null,
+      rendered: false,
+      renderSource: "failed",
+      shellDetected,
+    };
   }
 }
 
@@ -278,14 +316,35 @@ function pushFile(filesMap, fileRecord, counters, warnings) {
   const existing = filesMap.get(fileRecord.path);
   if (existing) {
     counters.totalChars -= existing.content.length;
+    counters.totalChars -= Number(existing.renderedSize || 0);
   }
 
   counters.totalChars += fileRecord.content.length;
+
+  let renderedContent = null;
+  let renderedSize = 0;
+  if (typeof fileRecord.renderedContent === "string" && fileRecord.renderedContent.trim()) {
+    const rawRendered = fileRecord.renderedContent;
+    if (rawRendered.length > MAX_RENDER_SNAPSHOT_CHARS) {
+      warnings.push(`Skipped large rendered snapshot: ${fileRecord.path}`);
+    } else if (counters.totalChars + rawRendered.length > MAX_TOTAL_CHARS) {
+      warnings.push(`Skipped rendered snapshot due to total size limit: ${fileRecord.path}`);
+    } else {
+      renderedContent = rawRendered;
+      renderedSize = rawRendered.length;
+      counters.totalChars += rawRendered.length;
+    }
+  }
+
   filesMap.set(fileRecord.path, {
     path: fileRecord.path,
     type: fileRecord.type,
     sourceUrl: fileRecord.sourceUrl,
     size: fileRecord.content.length,
+    renderedSize,
+    renderSource: fileRecord.renderSource || null,
+    shellDetected: !!fileRecord.shellDetected,
+    renderedContent,
     content: fileRecord.content,
   });
 }
@@ -352,6 +411,13 @@ module.exports = async function handler(req, res) {
   const seenAssets = new Set();
   const warnings = [];
   const counters = { totalChars: 0 };
+  const renderStats = {
+    shellPagesDetected: 0,
+    renderedPages: 0,
+    primarySuccesses: 0,
+    proxySuccesses: 0,
+    failedRenderAttempts: 0,
+  };
   let fetchedAssets = 0;
   let processedAssets = 0;
 
@@ -383,6 +449,8 @@ module.exports = async function handler(req, res) {
     const currentUrl = currentEntry && currentEntry.url;
     const currentDepth = currentEntry && typeof currentEntry.depth === "number" ? currentEntry.depth : 0;
     let rendered = false;
+    let renderSource = "none";
+    let shellDetected = false;
     if (!currentUrl || visitedPages.has(currentUrl)) {
       continue;
     }
@@ -393,6 +461,18 @@ module.exports = async function handler(req, res) {
       const pageResult = await fetchPageHtml(currentUrl, renderJs, warnings);
       const text = pageResult.text;
       rendered = !!pageResult.rendered;
+      renderSource = pageResult.renderSource || "none";
+      shellDetected = !!pageResult.shellDetected;
+      if (pageResult.shellDetected) {
+        renderStats.shellPagesDetected += 1;
+      }
+      if (rendered) {
+        renderStats.renderedPages += 1;
+        if (pageResult.renderSource === "primary") renderStats.primarySuccesses += 1;
+        if (pageResult.renderSource === "proxy") renderStats.proxySuccesses += 1;
+      } else if (pageResult.renderSource === "failed") {
+        renderStats.failedRenderAttempts += 1;
+      }
       const currentObj = new URL(currentUrl);
       const pagePath = makePagePath(currentObj);
 
@@ -403,6 +483,9 @@ module.exports = async function handler(req, res) {
           type: "html",
           sourceUrl: currentUrl,
           content: text,
+          renderedContent: pageResult.renderedText,
+          renderSource: pageResult.renderSource,
+          shellDetected: pageResult.shellDetected,
         },
         counters,
         warnings
@@ -437,6 +520,8 @@ module.exports = async function handler(req, res) {
       type: "page",
       url: currentUrl,
       rendered,
+      renderSource,
+      shellDetected,
       pagesVisited: visitedPages.size,
       pageLimit,
       assetsProcessed: processedAssets,
@@ -565,6 +650,14 @@ module.exports = async function handler(req, res) {
   }
 
   const files = Array.from(filesMap.values()).sort((a, b) => a.path.localeCompare(b.path));
+  const assetsCoverage = seenAssets.size > 0 ? Math.min(1, fetchedAssets / seenAssets.size) : 1;
+  const renderCoverage = renderStats.shellPagesDetected > 0
+    ? Math.min(1, renderStats.renderedPages / renderStats.shellPagesDetected)
+    : 1;
+  const fileDensity = (visitedPages.size + fetchedAssets) > 0
+    ? Math.min(1, files.length / (visitedPages.size + fetchedAssets))
+    : 1;
+  const completenessScore = Math.round((assetsCoverage * 0.35 + renderCoverage * 0.4 + fileDensity * 0.25) * 100);
 
   const data = json(200, {
     slug,
@@ -583,6 +676,22 @@ module.exports = async function handler(req, res) {
       sameOriginAssetsOnly: effectiveSameOriginAssetsOnly,
       renderJs,
       aggressiveProfile: isKnownJsHeavy,
+      renderer: {
+        mode: renderJs ? "enabled" : "disabled",
+        shellPagesDetected: renderStats.shellPagesDetected,
+        renderedPages: renderStats.renderedPages,
+        primarySuccesses: renderStats.primarySuccesses,
+        proxySuccesses: renderStats.proxySuccesses,
+        failedRenderAttempts: renderStats.failedRenderAttempts,
+      },
+      quality: {
+        shellPagesDetected: renderStats.shellPagesDetected,
+        renderedPages: renderStats.renderedPages,
+        assetsCoverage,
+        renderCoverage,
+        fileDensity,
+        completenessScore,
+      },
     },
     warnings,
     files,

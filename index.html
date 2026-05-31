@@ -881,6 +881,51 @@
       color: var(--text);
     }
 
+    .report-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .report-card {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #111;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .report-title {
+      font-size: .62rem;
+      color: var(--muted);
+      letter-spacing: .12em;
+      text-transform: uppercase;
+    }
+
+    .report-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      gap: 10px;
+      font-size: .7rem;
+      color: #b9b9b9;
+      letter-spacing: .04em;
+      border-bottom: 1px dashed rgba(255, 255, 255, 0.07);
+      padding-bottom: 4px;
+    }
+
+    .report-row:last-child {
+      border-bottom: 0;
+      padding-bottom: 0;
+    }
+
+    .report-row strong {
+      color: var(--text);
+      font-weight: 600;
+    }
+
     .modal-backdrop {
       position: fixed;
       inset: 0;
@@ -1023,6 +1068,10 @@
       .manager-toolbar {
         flex-direction: column;
         align-items: stretch;
+      }
+
+      .report-grid {
+        grid-template-columns: 1fr;
       }
 
       .manager-toolbar-left,
@@ -1280,6 +1329,25 @@
         </div>
       </div>
 
+      <div class="report-grid wizard-step step-4">
+        <div class="report-card">
+          <div class="report-title">Renderer Health</div>
+          <div class="report-row"><span>Mode</span><strong id="healthMode">-</strong></div>
+          <div class="report-row"><span>Shell Pages</span><strong id="healthShell">0</strong></div>
+          <div class="report-row"><span>Rendered Pages</span><strong id="healthRendered">0</strong></div>
+          <div class="report-row"><span>Primary Success</span><strong id="healthPrimary">0</strong></div>
+          <div class="report-row"><span>Proxy Success</span><strong id="healthProxy">0</strong></div>
+        </div>
+        <div class="report-card">
+          <div class="report-title">Scrape Quality Report</div>
+          <div class="report-row"><span>Completeness</span><strong id="qualityScore">0%</strong></div>
+          <div class="report-row"><span>Assets Coverage</span><strong id="qualityAssets">0%</strong></div>
+          <div class="report-row"><span>Render Coverage</span><strong id="qualityRender">0%</strong></div>
+          <div class="report-row"><span>File Density</span><strong id="qualityDensity">0%</strong></div>
+          <div class="report-row"><span>Rendered Snapshots</span><strong id="qualitySnapshots">0</strong></div>
+        </div>
+      </div>
+
       <div class="wizard-nav">
         <span class="wizard-info" id="wizardStepLabel">Use Next to continue</span>
         <div class="btn-row" style="margin:0;">
@@ -1348,6 +1416,8 @@
     </div>
     <div id="previewMeta" style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:.68rem;color:var(--muted);word-break:break-all;">No code scraped yet.</div>
     <div class="viewer-toolbar" style="border-bottom:0;">
+      <button id="previewRenderedBtn" class="mini-btn active" type="button">Rendered Snapshot</button>
+      <button id="previewOriginalBtn" class="mini-btn" type="button">Original HTML</button>
       <span class="preview-status" id="previewStatus" style="margin-left:0;">No code scraped yet.</span>
     </div>
     <div style="border-top:1px solid var(--border);min-height:320px;height:56vh;max-height:72vh;overflow:hidden;">
@@ -1376,6 +1446,7 @@
         <div class="updates-item">Moved Live Preview into its own dedicated tab with empty-state handling when no code is scraped.</div>
         <div class="updates-item">Added JavaScript render mode option for stronger scraping on modern JS-heavy websites.</div>
         <div class="updates-item">Added aggressive scraping profile for Discord/Instagram/TikTok with external asset crawling and JS-shell fallback rendering.</div>
+        <div class="updates-item">Added Renderer Health panel, Scrape Quality report, and rendered snapshot preview mode controls.</div>
       </div>
     </div>
   </div>
@@ -1462,8 +1533,20 @@
   const realCountEl = document.getElementById('realCount');
   const botCountEl = document.getElementById('botCount');
   const totalCountEl = document.getElementById('totalCount');
+  const healthModeEl = document.getElementById('healthMode');
+  const healthShellEl = document.getElementById('healthShell');
+  const healthRenderedEl = document.getElementById('healthRendered');
+  const healthPrimaryEl = document.getElementById('healthPrimary');
+  const healthProxyEl = document.getElementById('healthProxy');
+  const qualityScoreEl = document.getElementById('qualityScore');
+  const qualityAssetsEl = document.getElementById('qualityAssets');
+  const qualityRenderEl = document.getElementById('qualityRender');
+  const qualityDensityEl = document.getElementById('qualityDensity');
+  const qualitySnapshotsEl = document.getElementById('qualitySnapshots');
   const fileListEl = document.getElementById('fileList');
   const sourceViewEl = document.getElementById('sourceView');
+  const previewRenderedBtn = document.getElementById('previewRenderedBtn');
+  const previewOriginalBtn = document.getElementById('previewOriginalBtn');
   const previewMetaEl = document.getElementById('previewMeta');
   const previewRouteEl = document.getElementById('previewRoute');
   const previewStatusEl = document.getElementById('previewStatus');
@@ -1477,7 +1560,7 @@
 
   let running = false;
   let logLines = 0;
-  const APP_VERSION = 'v.2.7.0';
+  const APP_VERSION = 'v.2.8.0';
   const PREFS_KEY = 'chroniumx.scraperPrefs.v1';
   let currentStorageKey = 'sourcevault.scrapes.v1';
   let wizardStep = 1;
@@ -1488,6 +1571,7 @@
     selectedFiles: new Set(),
     liveProgress: null,
     searchTerm: '',
+    previewMode: 'rendered',
   };
   let pageLoadTimer = null;
   let pageLoadToken = 0;
@@ -1936,6 +2020,44 @@
     previewStatusEl.textContent = message;
   }
 
+  function pct(value) {
+    return `${Math.round(Math.max(0, Math.min(1, Number(value) || 0)) * 100)}%`;
+  }
+
+  function setPreviewMode(mode) {
+    state.previewMode = mode === 'original' ? 'original' : 'rendered';
+    previewRenderedBtn.classList.toggle('active', state.previewMode === 'rendered');
+    previewOriginalBtn.classList.toggle('active', state.previewMode === 'original');
+  }
+
+  function renderHealthReport() {
+    const scrape = currentScrape();
+    const stats = scrape && scrape.stats ? scrape.stats : {};
+    const renderer = stats.renderer || {};
+    const quality = stats.quality || {};
+
+    const modeText = renderer.mode === 'enabled'
+      ? 'Enabled'
+      : renderer.mode === 'disabled'
+        ? 'Disabled'
+        : '-';
+
+    healthModeEl.textContent = modeText;
+    healthShellEl.textContent = String(Number(renderer.shellPagesDetected || 0));
+    healthRenderedEl.textContent = String(Number(renderer.renderedPages || 0));
+    healthPrimaryEl.textContent = String(Number(renderer.primarySuccesses || 0));
+    healthProxyEl.textContent = String(Number(renderer.proxySuccesses || 0));
+
+    qualityScoreEl.textContent = `${Number(quality.completenessScore || 0)}%`;
+    qualityAssetsEl.textContent = pct(quality.assetsCoverage || 0);
+    qualityRenderEl.textContent = pct(quality.renderCoverage || 0);
+    qualityDensityEl.textContent = pct(quality.fileDensity || 0);
+
+    const files = Object.values((scrape && scrape.files) || {});
+    const snapshots = files.filter((file) => typeof file.renderedContent === 'string' && file.renderedContent.trim()).length;
+    qualitySnapshotsEl.textContent = String(snapshots);
+  }
+
   function normalizeFilePath(path) {
     const parts = String(path || '').split('/');
     const stack = [];
@@ -1968,8 +2090,12 @@
     return normalizeFilePath(merged);
   }
 
-  function makeBlobUrlForFile(file) {
+  function makeBlobUrlForFile(file, options = {}) {
+    const { preferRendered = false } = options;
     const type = String(file.type || '').toLowerCase();
+    const content = (preferRendered && type === 'html' && typeof file.renderedContent === 'string' && file.renderedContent.trim())
+      ? file.renderedContent
+      : (file.content || '');
     const mime = type === 'html'
       ? 'text/html;charset=utf-8'
       : type === 'css'
@@ -1977,14 +2103,18 @@
         : type === 'js'
           ? 'text/javascript;charset=utf-8'
           : 'text/plain;charset=utf-8';
-    const blobUrl = URL.createObjectURL(new Blob([file.content || ''], { type: mime }));
+    const blobUrl = URL.createObjectURL(new Blob([content], { type: mime }));
     previewAssetUrls.push(blobUrl);
     return blobUrl;
   }
 
-  function rewriteHtmlForPreview(file, filesByPath) {
+  function rewriteHtmlForPreview(file, filesByPath, options = {}) {
+    const { preferRendered = false } = options;
+    const sourceHtml = (preferRendered && typeof file.renderedContent === 'string' && file.renderedContent.trim())
+      ? file.renderedContent
+      : (file.content || '');
     const parser = new DOMParser();
-    const doc = parser.parseFromString(file.content || '', 'text/html');
+    const doc = parser.parseFromString(sourceHtml, 'text/html');
     const attrTargets = [
       ['link[href]', 'href'],
       ['script[src]', 'src'],
@@ -2004,7 +2134,7 @@
         if (!localPath || !filesByPath[localPath]) return;
 
         const localFile = filesByPath[localPath];
-        const blobUrl = makeBlobUrlForFile(localFile);
+        const blobUrl = makeBlobUrlForFile(localFile, { preferRendered });
 
         const hashIndex = original.indexOf('#');
         const queryIndex = original.indexOf('?');
@@ -2041,7 +2171,9 @@
     }
 
     const filesByPath = currentFilesByPath();
-    const html = rewriteHtmlForPreview(file, filesByPath);
+    const hasRenderedSnapshot = typeof file.renderedContent === 'string' && file.renderedContent.trim();
+    const preferRendered = state.previewMode === 'rendered' && hasRenderedSnapshot;
+    const html = rewriteHtmlForPreview(file, filesByPath, { preferRendered });
     previewBlobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
     livePreviewEl.removeAttribute('srcdoc');
     livePreviewEl.src = previewBlobUrl;
@@ -2051,7 +2183,11 @@
         ? `/preview/${encodeURIComponent(state.activeSlug)}/${state.activeFilePath}`
         : `/preview/${encodeURIComponent(state.activeSlug)}`)
       : '/preview';
-    setPreviewStatus(`Previewing ${file.path}`);
+    if (state.previewMode === 'rendered') {
+      setPreviewStatus(hasRenderedSnapshot ? `Previewing rendered snapshot: ${file.path}` : `No rendered snapshot for ${file.path}; showing original HTML.`);
+    } else {
+      setPreviewStatus(`Previewing original HTML: ${file.path}`);
+    }
   }
 
   function renderPreviewPanel() {
@@ -2181,12 +2317,23 @@
       realCountEl.textContent = '0';
       botCountEl.textContent = '0';
       totalCountEl.textContent = '0';
+      healthModeEl.textContent = '-';
+      healthShellEl.textContent = '0';
+      healthRenderedEl.textContent = '0';
+      healthPrimaryEl.textContent = '0';
+      healthProxyEl.textContent = '0';
+      qualityScoreEl.textContent = '0%';
+      qualityAssetsEl.textContent = '0%';
+      qualityRenderEl.textContent = '0%';
+      qualityDensityEl.textContent = '0%';
+      qualitySnapshotsEl.textContent = '0';
       return;
     }
 
     realCountEl.textContent = String(Number((active.stats && active.stats.pagesVisited) || 0));
     botCountEl.textContent = String(Number((active.stats && active.stats.assetsSaved) || 0));
     totalCountEl.textContent = String(Object.keys(active.files || {}).length);
+    renderHealthReport();
   }
 
   function renderFileManager() {
@@ -2418,11 +2565,10 @@
     }
 
     state.activeSlug = slug;
-    const files = filesForActive();
     if (filePath && state.scrapes[slug].files && state.scrapes[slug].files[filePath]) {
       state.activeFilePath = filePath;
     } else {
-      state.activeFilePath = files[0] ? files[0].path : null;
+      state.activeFilePath = pickInitialFile(state.scrapes[slug].files || {});
     }
 
     switchPage('files');
@@ -2437,6 +2583,9 @@
       type: file.type,
       sourceUrl: file.sourceUrl,
       size: file.size,
+      renderedSize: file.renderedSize,
+      renderSource: file.renderSource,
+      shellDetected: !!file.shellDetected,
     }));
 
     return {
@@ -2459,6 +2608,10 @@
         sourceUrl: String(file.sourceUrl || ''),
         content: file.content,
         size: Number(file.size || file.content.length || 0),
+        renderedContent: typeof file.renderedContent === 'string' ? file.renderedContent : null,
+        renderedSize: Number(file.renderedSize || 0),
+        renderSource: file.renderSource || null,
+        shellDetected: !!file.shellDetected,
       };
     }
 
@@ -2659,7 +2812,8 @@
               pagesVisited: event.pagesVisited,
               assetsProcessed: event.assetsProcessed,
             });
-            log(`Page ${event.pagesVisited}/${event.pageLimit}: ${event.url}${event.rendered ? ' [JS rendered]' : ''}`, event.error ? 'warn' : 'num');
+            const renderTag = event.rendered ? ` [${event.renderSource || 'rendered'}]` : '';
+            log(`Page ${event.pagesVisited}/${event.pageLimit}: ${event.url}${renderTag}`, event.error ? 'warn' : 'num');
             if (event.error) {
               log(`Page warning: ${event.error}`, 'warn');
             }
@@ -2799,6 +2953,16 @@
     log(`Downloaded manifest for ${scrape.slug}.`, 'success');
   });
 
+  previewRenderedBtn.addEventListener('click', () => {
+    setPreviewMode('rendered');
+    renderPreviewPanel();
+  });
+
+  previewOriginalBtn.addEventListener('click', () => {
+    setPreviewMode('original');
+    renderPreviewPanel();
+  });
+
   clearBtn.addEventListener('click', () => {
     clearConsoleOutput();
     clearCurrentViewOnly();
@@ -2864,8 +3028,7 @@
     }
 
     state.activeSlug = slug;
-    const files = filesForActive();
-    state.activeFilePath = files[0] ? files[0].path : null;
+    state.activeFilePath = pickInitialFile(state.scrapes[slug].files || {});
     resetSelections();
     history.pushState({}, '', state.activeFilePath ? makeRoute(slug, state.activeFilePath) : `/${encodeURIComponent(slug)}`);
     renderSiteSelect();
@@ -2932,6 +3095,7 @@
   currentStorageKey = safeStorageKey();
   state.scrapes = loadScrapes(currentStorageKey);
   updatesVersion.textContent = `Version: ${APP_VERSION}`;
+  setPreviewMode('rendered');
   renderPreviewMessage('No code scraped yet.');
   setPreviewStatus('No code scraped yet.');
   log('ChroniumX initialized in scraper mode.', 'dim');
