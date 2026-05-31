@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bot Sender</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg:        #0d0d0d;
+      --surface:   #161616;
+      --border:    #2a2a2a;
+      --border2:   #3a3a3a;
+      --text:      #e8e8e8;
+      --muted:     #666;
+      --accent:    #ffffff;
+      --font:      'JetBrains Mono', monospace;
+
+      /* VSCode-style console colours */
+      --c-time:    #569cd6;
+      --c-info:    #9cdcfe;
+      --c-success: #4ec9b0;
+      --c-warn:    #dcdcaa;
+      --c-error:   #f44747;
+      --c-sent:    #ce9178;
+      --c-dim:     #6a9955;
+      --c-tag:     #c586c0;
+      --c-num:     #b5cea8;
+      --c-url:     #569cd6;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 60px;
+    }
+
+    /* ── Header ─────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      color: var(--accent);
+      text-transform: uppercase;
+    }
+    header p {
+      font-size: .72rem;
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: .08em;
+    }
+
+    /* ── Panel ───────────────────────────────── */
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      width: 100%;
+      max-width: 760px;
+    }
+
+    .panel-title {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: .68rem;
+      letter-spacing: .14em;
+      color: var(--muted);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-title::before {
+      content: '';
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--border2);
+    }
+
+    /* ── Form ────────────────────────────────── */
+    .form-body {
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    label {
+      font-size: .68rem;
+      letter-spacing: .1em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+    input[type="url"],
+    input[type="number"] {
+      background: #0d0d0d;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: .85rem;
+      padding: 10px 14px;
+      border-radius: 4px;
+      outline: none;
+      transition: border-color .15s;
+      width: 100%;
+    }
+    input[type="url"]:focus,
+    input[type="number"]:focus {
+      border-color: var(--border2);
+    }
+    input::placeholder { color: var(--muted); }
+
+    .row {
+      display: flex;
+      gap: 14px;
+    }
+    .row .field { flex: 1; }
+
+    /* range hint */
+    .hint {
+      font-size: .62rem;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    /* ── Status bar ──────────────────────────── */
+    .status-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .status-label {
+      display: flex;
+      justify-content: space-between;
+      font-size: .68rem;
+      color: var(--muted);
+    }
+    .status-label span { color: var(--text); }
+
+    .bar-track {
+      background: #0d0d0d;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      height: 8px;
+      overflow: hidden;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width .25s ease;
+    }
+
+    /* ── Button ──────────────────────────────── */
+    .btn-row {
+      display: flex;
+      gap: 10px;
+    }
+    button {
+      font-family: var(--font);
+      font-size: .78rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      padding: 10px 22px;
+      border-radius: 4px;
+      border: 1px solid var(--border2);
+      cursor: pointer;
+      transition: background .15s, color .15s;
+    }
+    #startBtn {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+      font-weight: 700;
+    }
+    #startBtn:hover:not(:disabled) { background: #d0d0d0; }
+    #startBtn:disabled {
+      background: var(--border);
+      color: var(--muted);
+      border-color: var(--border);
+      cursor: not-allowed;
+    }
+    #clearBtn {
+      background: transparent;
+      color: var(--muted);
+    }
+    #clearBtn:hover { color: var(--text); background: var(--border); }
+
+    /* ── Console ─────────────────────────────── */
+    .console-panel {
+      margin-top: 24px;
+    }
+    .console-panel .panel-title {
+      justify-content: space-between;
+    }
+    .console-panel .panel-title::before { background: #4ec9b0; }
+    .badge {
+      background: var(--border);
+      color: var(--muted);
+      font-size: .6rem;
+      padding: 2px 7px;
+      border-radius: 20px;
+      letter-spacing: .08em;
+    }
+
+    #console {
+      height: 320px;
+      overflow-y: auto;
+      padding: 14px 16px;
+      font-size: .78rem;
+      line-height: 1.7;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border2) transparent;
+    }
+    #console::-webkit-scrollbar { width: 5px; }
+    #console::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    .log-line {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      padding: 1px 0;
+    }
+    .log-line:hover { background: rgba(255,255,255,.025); border-radius: 3px; }
+
+    .ts   { color: var(--c-time);    min-width: 80px; }
+    .tag  { color: var(--c-tag);     min-width: 52px; font-size: .7rem; }
+    .msg  { color: var(--c-info);    word-break: break-all; }
+    .msg.success { color: var(--c-success); }
+    .msg.warn    { color: var(--c-warn); }
+    .msg.error   { color: var(--c-error); }
+    .msg.sent    { color: var(--c-sent); }
+    .msg.dim     { color: var(--c-dim); }
+    .msg.num     { color: var(--c-num); }
+    .msg.url     { color: var(--c-url); }
+
+    .empty-console {
+      color: var(--muted);
+      font-size: .72rem;
+      padding: 20px 0;
+      text-align: center;
+      letter-spacing: .08em;
+    }
+
+    /* ── Footer ──────────────────────────────── */
+    footer {
+      margin-top: 36px;
+      font-size: .6rem;
+      color: var(--muted);
+      letter-spacing: .1em;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Bot Sender</h1>
+    <p>Automated site visitor &mdash; max 100 &bull; min 5</p>
+  </header>
+
+  <!-- Config panel -->
+  <div class="panel">
+    <div class="panel-title">Configuration</div>
+    <div class="form-body">
+
+      <div class="field">
+        <label>Target URL</label>
+        <input type="url" id="urlInput" placeholder="https://example.com" />
+      </div>
+
+      <div class="row">
+        <div class="field">
+          <label>Visit Count</label>
+          <input type="number" id="countInput" min="5" max="100" value="10" />
+          <div class="hint">Min: 5 &nbsp;|&nbsp; Max: 100</div>
+        </div>
+        <div class="field">
+          <label>Delay (ms)</label>
+          <input type="number" id="delayInput" min="100" max="5000" value="600" />
+          <div class="hint">Between each request</div>
+        </div>
+      </div>
+
+      <!-- Status bar -->
+      <div class="status-wrap">
+        <div class="status-label">
+          Progress &nbsp;<span id="statusText">0 / 0</span>
+        </div>
+        <div class="bar-track">
+          <div class="bar-fill" id="barFill"></div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button id="startBtn">&#9654;&nbsp; Start</button>
+        <button id="clearBtn">Clear Console</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Console panel -->
+  <div class="panel console-panel">
+    <div class="panel-title">
+      <span>Output Console</span>
+      <span class="badge" id="lineCount">0 lines</span>
+    </div>
+    <div id="console">
+      <div class="empty-console" id="emptyMsg">// Console output will appear here</div>
+    </div>
+  </div>
+
+  <footer>BOTSENDER &copy; 2026</footer>
+
+<script>
+  const urlInput   = document.getElementById('urlInput');
+  const countInput = document.getElementById('countInput');
+  const delayInput = document.getElementById('delayInput');
+  const startBtn   = document.getElementById('startBtn');
+  const clearBtn   = document.getElementById('clearBtn');
+  const consoleEl  = document.getElementById('console');
+  const barFill    = document.getElementById('barFill');
+  const statusText = document.getElementById('statusText');
+  const lineCount  = document.getElementById('lineCount');
+  const emptyMsg   = document.getElementById('emptyMsg');
+
+  let running = false;
+  let logLines = 0;
+
+  /* ── Helpers ─────────────────────────────── */
+  function timestamp() {
+    const n = new Date();
+    return [n.getHours(), n.getMinutes(), n.getSeconds()]
+      .map(v => String(v).padStart(2,'0')).join(':');
+  }
+
+  const tagMap = {
+    info:    '[INFO]',
+    success: '[OK]  ',
+    warn:    '[WARN]',
+    error:   '[ERR] ',
+    sent:    '[SEND]',
+    dim:     '[SYS] ',
+    num:     '[STAT]',
+    url:     '[URL] ',
+  };
+
+  function log(message, type = 'info') {
+    if (emptyMsg) emptyMsg.remove();
+
+    const line = document.createElement('div');
+    line.className = 'log-line';
+
+    const ts  = document.createElement('span');
+    ts.className = 'ts';
+    ts.textContent = timestamp();
+
+    const tag = document.createElement('span');
+    tag.className = 'tag';
+    tag.textContent = tagMap[type] || '[LOG] ';
+
+    const msg = document.createElement('span');
+    msg.className = `msg ${type}`;
+    msg.textContent = message;
+
+    line.appendChild(ts);
+    line.appendChild(tag);
+    line.appendChild(msg);
+    consoleEl.appendChild(line);
+
+    logLines++;
+    lineCount.textContent = `${logLines} line${logLines !== 1 ? 's' : ''}`;
+    consoleEl.scrollTop = consoleEl.scrollHeight;
+  }
+
+  function setProgress(done, total) {
+    const pct = total > 0 ? (done / total) * 100 : 0;
+    barFill.style.width = pct + '%';
+    statusText.textContent = `${done} / ${total}`;
+  }
+
+  function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
+
+  /* ── Send visit ──────────────────────────── */
+  async function sendVisit(url, index, total) {
+    log(`Sending visit ${index} of ${total}  →  ${url}`, 'sent');
+    try {
+      const start = performance.now();
+      await fetch(url, {
+        method: 'GET',
+        mode: 'no-cors',
+        cache: 'no-store',
+        credentials: 'omit',
+      });
+      const ms = Math.round(performance.now() - start);
+      log(`Visit ${index} dispatched  (${ms} ms)`, 'success');
+    } catch (err) {
+      log(`Visit ${index} failed  —  ${err.message}`, 'error');
+    }
+  }
+
+  /* ── Main routine ────────────────────────── */
+  async function run() {
+    const url   = urlInput.value.trim();
+    let   count = parseInt(countInput.value, 10);
+    const delay = Math.max(100, parseInt(delayInput.value, 10) || 600);
+
+    /* Validate */
+    if (!url) {
+      log('No target URL provided.', 'error');
+      return;
+    }
+    try { new URL(url); } catch {
+      log('Invalid URL format.  Example: https://example.com', 'error');
+      return;
+    }
+    if (isNaN(count) || count < 5) {
+      log('Visit count must be at least 5.  Clamping to 5.', 'warn');
+      count = 5;
+      countInput.value = 5;
+    }
+    if (count > 100) {
+      log('Visit count exceeds maximum of 100.  Clamping to 100.', 'warn');
+      count = 100;
+      countInput.value = 100;
+    }
+
+    running = true;
+    startBtn.disabled = true;
+    setProgress(0, count);
+
+    log('─'.repeat(48), 'dim');
+    log(`Session started`, 'dim');
+    log(`Target   :  ${url}`, 'url');
+    log(`Visits   :  ${count}`, 'num');
+    log(`Delay    :  ${delay} ms`, 'num');
+    log('─'.repeat(48), 'dim');
+
+    for (let i = 1; i <= count; i++) {
+      if (!running) {
+        log('Session aborted by user.', 'warn');
+        break;
+      }
+      await sendVisit(url, i, count);
+      setProgress(i, count);
+      if (i < count) await sleep(delay);
+    }
+
+    log('─'.repeat(48), 'dim');
+    log(`Session complete  —  ${count} visit${count !== 1 ? 's' : ''} sent.`, 'success');
+    log('─'.repeat(48), 'dim');
+
+    running = false;
+    startBtn.disabled = false;
+  }
+
+  /* ── Events ──────────────────────────────── */
+  startBtn.addEventListener('click', () => {
+    if (!running) run();
+  });
+
+  clearBtn.addEventListener('click', () => {
+    consoleEl.innerHTML = '<div class="empty-console" id="emptyMsg">// Console output will appear here</div>';
+    logLines = 0;
+    lineCount.textContent = '0 lines';
+    setProgress(0, 0);
+    if (!running) startBtn.disabled = false;
+  });
+
+  /* clamp inputs live */
+  countInput.addEventListener('change', () => {
+    let v = parseInt(countInput.value, 10);
+    if (v < 5)   countInput.value = 5;
+    if (v > 100) countInput.value = 100;
+  });
+</script>
+</body>
+</html>
