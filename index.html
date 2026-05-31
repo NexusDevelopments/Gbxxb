@@ -578,12 +578,148 @@
       letter-spacing: .1em;
     }
 
+    @media (max-width: 900px) {
+      body {
+        padding: 20px 14px 36px;
+      }
+
+      .app-tabs {
+        gap: 6px;
+      }
+
+      .app-tab-btn {
+        font-size: .66rem;
+        padding: 9px 8px;
+      }
+
+      .panel-title {
+        flex-wrap: wrap;
+      }
+
+      .btn-row {
+        flex-wrap: wrap;
+      }
+
+      .btn-row button {
+        flex: 1 1 180px;
+      }
+
+      .wizard-nav {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .wizard-nav .btn-row {
+        width: 100%;
+      }
+
+      .wizard-nav .btn-row button {
+        flex: 1;
+      }
+    }
+
     @media (max-width: 700px) {
       .row {
         flex-direction: column;
       }
       .counter-grid {
         grid-template-columns: 1fr;
+      }
+
+      .app-tabs {
+        flex-direction: column;
+      }
+
+      .app-tab-btn {
+        width: 100%;
+      }
+
+      .wizard-steps {
+        flex-direction: column;
+      }
+
+      .wizard-chip {
+        width: 100%;
+        text-align: left;
+      }
+
+      #fileManagerHeaderActions {
+        width: 100%;
+      }
+
+      #fileManagerHeaderActions .mini-btn {
+        flex: 1 1 120px;
+      }
+
+      #fileManagerSearchRow {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      #fileManagerSearchRow #searchInput {
+        width: 100%;
+      }
+
+      #fileManagerSearchRow .mini-btn,
+      #fileManagerSearchRow .badge {
+        width: 100%;
+        text-align: center;
+      }
+
+      #fileManagerSplit {
+        flex-direction: column;
+      }
+
+      #fileList {
+        width: 100% !important;
+        min-width: 0 !important;
+        border-right: 0 !important;
+        border-bottom: 1px solid var(--border);
+        max-height: 300px;
+      }
+
+      .tree-file-row {
+        gap: 4px;
+      }
+
+      .tree-file-link {
+        font-size: .68rem;
+      }
+
+      button,
+      .mini-btn {
+        min-height: 38px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      header h1 {
+        font-size: 1.2rem;
+      }
+
+      header p {
+        font-size: .64rem;
+      }
+
+      .form-body {
+        padding: 14px;
+      }
+
+      .panel-title {
+        padding: 10px 12px;
+      }
+
+      .wizard-info,
+      .hint {
+        font-size: .56rem;
+      }
+
+      input[type="url"],
+      input[type="number"],
+      input[type="text"],
+      select {
+        font-size: .8rem;
+        padding: 10px;
       }
     }
   </style>
@@ -743,7 +879,7 @@
   <div class="panel console-panel">
     <div class="panel-title">
       <span>File Manager</span>
-      <div style="display:flex;align-items:center;gap:8px;">
+      <div id="fileManagerHeaderActions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <button id="downloadCurrentBtn" class="mini-btn" type="button">Download File</button>
         <button id="downloadAllBtn" class="mini-btn" type="button">Download ZIP</button>
         <button id="downloadSelectedBtn" class="mini-btn" type="button">Selected ZIP</button>
@@ -752,12 +888,12 @@
         <span class="badge" id="activeRoute">/</span>
       </div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);padding:10px 12px;">
+    <div id="fileManagerSearchRow" style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);padding:10px 12px;">
       <input id="searchInput" type="text" placeholder="Search files by name, path, or content" style="flex:1;background:#0d0d0d;border:1px solid var(--border);color:var(--text);font-family:var(--font);font-size:.76rem;padding:8px 10px;border-radius:4px;" />
       <button id="clearSearchBtn" class="mini-btn" type="button">Clear</button>
       <span class="badge" id="searchCount">0 results</span>
     </div>
-    <div style="display:flex;gap:0;border-top:1px solid var(--border);min-height:280px;">
+    <div id="fileManagerSplit" style="display:flex;gap:0;border-top:1px solid var(--border);min-height:280px;">
       <div id="fileList" style="width:38%;min-width:220px;border-right:1px solid var(--border);padding:10px;overflow:auto;"></div>
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
         <div id="sourceMeta" style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:.68rem;color:var(--muted);word-break:break-all;">Source URL: -</div>
