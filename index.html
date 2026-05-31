@@ -103,6 +103,11 @@
       border-color: var(--accent);
     }
 
+    .app-tab-btn.updates {
+      flex: 0 0 auto;
+      min-width: 110px;
+    }
+
     .app-page {
       width: 100%;
       max-width: 760px;
@@ -565,6 +570,106 @@
       text-transform: uppercase;
     }
 
+    .manager-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+      border-top: 1px solid var(--border);
+      padding: 10px 12px;
+      background: #141414;
+    }
+
+    .manager-toolbar-left,
+    .manager-toolbar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .updates-wrap {
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .updates-version {
+      font-size: .72rem;
+      color: var(--text);
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      padding: 8px 10px;
+      background: #111;
+      width: fit-content;
+    }
+
+    .updates-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .updates-item {
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 10px;
+      background: #111;
+      font-size: .73rem;
+      line-height: 1.5;
+      color: var(--text);
+    }
+
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.6);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 16px;
+    }
+
+    .modal-backdrop.open {
+      display: flex;
+    }
+
+    .modal-box {
+      width: 100%;
+      max-width: 460px;
+      border: 1px solid var(--border2);
+      border-radius: 6px;
+      background: #121212;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 12px 42px rgba(0, 0, 0, 0.45);
+    }
+
+    .modal-title {
+      font-size: .76rem;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--text);
+    }
+
+    .modal-message {
+      font-size: .72rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
     .mini-btn:hover {
       color: var(--text);
       background: var(--border);
@@ -656,6 +761,16 @@
         align-items: stretch;
       }
 
+      .manager-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .manager-toolbar-left,
+      .manager-toolbar-right {
+        width: 100%;
+      }
+
       #fileManagerSearchRow #searchInput {
         width: 100%;
       }
@@ -714,6 +829,14 @@
         font-size: .56rem;
       }
 
+      .modal-actions {
+        flex-direction: column;
+      }
+
+      .modal-actions button {
+        width: 100%;
+      }
+
       input[type="url"],
       input[type="number"],
       input[type="text"],
@@ -736,6 +859,7 @@
     <button class="app-tab-btn active" id="tabSettings" data-page="settings" type="button">Settings</button>
     <button class="app-tab-btn" id="tabFiles" data-page="files" type="button">File Manager</button>
     <button class="app-tab-btn" id="tabConsole" data-page="console" type="button">Console</button>
+    <button class="app-tab-btn updates" id="tabUpdates" data-page="updates" type="button">Updates</button>
   </div>
 
   <!-- Config panel -->
@@ -867,7 +991,7 @@
 
       <div class="btn-row wizard-step step-4">
         <button id="startBtn">&#9654;&nbsp; Scrape</button>
-        <button id="clearBtn">Clear Console</button>
+        <button id="clearBtn">Clear View</button>
         <button id="resetStatsBtn">Delete Active Scrape</button>
       </div>
 
@@ -879,25 +1003,43 @@
   <div class="panel console-panel">
     <div class="panel-title">
       <span>File Manager</span>
-      <div id="fileManagerHeaderActions" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <button id="downloadCurrentBtn" class="mini-btn" type="button">Download File</button>
-        <button id="downloadAllBtn" class="mini-btn" type="button">Download ZIP</button>
-        <button id="downloadSelectedBtn" class="mini-btn" type="button">Selected ZIP</button>
-        <button id="downloadManifestBtn" class="mini-btn" type="button">Manifest JSON</button>
-        <span class="badge" id="selectedCount">0 selected</span>
-        <span class="badge" id="activeRoute">/</span>
-      </div>
     </div>
-    <div id="fileManagerSearchRow" style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--border);padding:10px 12px;">
+    <div class="manager-toolbar" id="fileManagerHeaderActions">
+      <div class="manager-toolbar-left" id="fileManagerSearchRow">
       <input id="searchInput" type="text" placeholder="Search files by name, path, or content" style="flex:1;background:#0d0d0d;border:1px solid var(--border);color:var(--text);font-family:var(--font);font-size:.76rem;padding:8px 10px;border-radius:4px;" />
       <button id="clearSearchBtn" class="mini-btn" type="button">Clear</button>
       <span class="badge" id="searchCount">0 results</span>
+      </div>
+      <div class="manager-toolbar-right">
+        <button id="downloadCurrentBtn" class="mini-btn" type="button">Current File</button>
+        <button id="downloadAllBtn" class="mini-btn" type="button">All ZIP</button>
+        <button id="downloadSelectedBtn" class="mini-btn" type="button">Selected ZIP</button>
+        <button id="downloadManifestBtn" class="mini-btn" type="button">Manifest</button>
+        <span class="badge" id="selectedCount">0 selected</span>
+        <span class="badge" id="activeRoute">/</span>
+      </div>
     </div>
     <div id="fileManagerSplit" style="display:flex;gap:0;border-top:1px solid var(--border);min-height:280px;">
       <div id="fileList" style="width:38%;min-width:220px;border-right:1px solid var(--border);padding:10px;overflow:auto;"></div>
       <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;">
         <div id="sourceMeta" style="padding:10px 14px;border-bottom:1px solid var(--border);font-size:.68rem;color:var(--muted);word-break:break-all;">Source URL: -</div>
         <pre id="sourceView" style="margin:0;padding:14px;font-size:.76rem;line-height:1.6;overflow:auto;flex:1;color:var(--c-info);background:#101010;">Select a scraped file to view its source.</pre>
+      </div>
+    </div>
+  </div>
+  </section>
+
+  <section class="app-page" id="pageUpdates" hidden>
+  <div class="panel console-panel">
+    <div class="panel-title">Updates</div>
+    <div class="updates-wrap">
+      <div class="updates-version" id="updatesVersion">Version: v.2.2.0</div>
+      <div class="updates-list" id="updatesList">
+        <div class="updates-item">Added tabbed pages for settings, file manager, console, and updates.</div>
+        <div class="updates-item">Introduced step-by-step settings wizard with simplified flow.</div>
+        <div class="updates-item">Improved mobile layout and stacked file manager for smaller screens.</div>
+        <div class="updates-item">Added folder tree grouping plus per-file/folder/site export options.</div>
+        <div class="updates-item">Added live crawl progress updates during scrape.</div>
       </div>
     </div>
   </div>
@@ -918,6 +1060,14 @@
 
   <footer>CHRONIUMX &copy; 2026</footer>
 
+  <div class="modal-backdrop" id="confirmModalBackdrop" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div class="modal-box">
+      <div class="modal-title" id="confirmModalTitle">Confirm</div>
+      <div class="modal-message" id="confirmModalMessage"></div>
+      <div class="modal-actions" id="confirmModalActions"></div>
+    </div>
+  </div>
+
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
   const urlInput = document.getElementById('urlInput');
@@ -935,13 +1085,16 @@
   const tabSettings = document.getElementById('tabSettings');
   const tabFiles = document.getElementById('tabFiles');
   const tabConsole = document.getElementById('tabConsole');
+  const tabUpdates = document.getElementById('tabUpdates');
   const pageSettings = document.getElementById('pageSettings');
   const pageFiles = document.getElementById('pageFiles');
   const pageConsole = document.getElementById('pageConsole');
+  const pageUpdates = document.getElementById('pageUpdates');
   const wizardInfo = document.getElementById('wizardInfo');
   const wizardStepLabel = document.getElementById('wizardStepLabel');
   const wizardBackBtn = document.getElementById('wizardBackBtn');
   const wizardNextBtn = document.getElementById('wizardNextBtn');
+  const updatesVersion = document.getElementById('updatesVersion');
   const startBtn = document.getElementById('startBtn');
   const clearBtn = document.getElementById('clearBtn');
   const resetStatsBtn = document.getElementById('resetStatsBtn');
@@ -964,9 +1117,14 @@
   const sourceViewEl = document.getElementById('sourceView');
   const sourceMetaEl = document.getElementById('sourceMeta');
   const activeRouteEl = document.getElementById('activeRoute');
+  const confirmModalBackdrop = document.getElementById('confirmModalBackdrop');
+  const confirmModalTitle = document.getElementById('confirmModalTitle');
+  const confirmModalMessage = document.getElementById('confirmModalMessage');
+  const confirmModalActions = document.getElementById('confirmModalActions');
 
   let running = false;
   let logLines = 0;
+  const APP_VERSION = 'v.2.3.0';
   const PREFS_KEY = 'chroniumx.scraperPrefs.v1';
   let currentStorageKey = 'sourcevault.scrapes.v1';
   let wizardStep = 1;
@@ -994,14 +1152,51 @@
     const showSettings = pageName === 'settings';
     const showFiles = pageName === 'files';
     const showConsole = pageName === 'console';
+    const showUpdates = pageName === 'updates';
 
     pageSettings.hidden = !showSettings;
     pageFiles.hidden = !showFiles;
     pageConsole.hidden = !showConsole;
+    pageUpdates.hidden = !showUpdates;
 
     tabSettings.classList.toggle('active', showSettings);
     tabFiles.classList.toggle('active', showFiles);
     tabConsole.classList.toggle('active', showConsole);
+    tabUpdates.classList.toggle('active', showUpdates);
+  }
+
+  function showConfirmDialog({ title, message, confirmText = 'Yes', cancelText = 'No', confirmTone = 'default' }) {
+    return new Promise((resolve) => {
+      confirmModalTitle.textContent = title;
+      confirmModalMessage.textContent = message;
+      confirmModalActions.innerHTML = '';
+
+      const cancelBtn = document.createElement('button');
+      cancelBtn.type = 'button';
+      cancelBtn.textContent = cancelText;
+      cancelBtn.className = 'mini-btn';
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.textContent = confirmText;
+      confirmBtn.className = 'mini-btn';
+      if (confirmTone === 'danger') {
+        confirmBtn.style.borderColor = '#7a2f2f';
+        confirmBtn.style.color = '#ff9f9f';
+      }
+
+      const finish = (value) => {
+        confirmModalBackdrop.classList.remove('open');
+        resolve(value);
+      };
+
+      cancelBtn.addEventListener('click', () => finish(false));
+      confirmBtn.addEventListener('click', () => finish(true));
+
+      confirmModalActions.appendChild(cancelBtn);
+      confirmModalActions.appendChild(confirmBtn);
+      confirmModalBackdrop.classList.add('open');
+    });
   }
 
   function setWizardStep(step) {
@@ -1184,8 +1379,12 @@
       }
     });
 
+    if (parts[0] === 'updates') {
+      return { mode: 'updates', slug: null, filePath: null };
+    }
+
     if (parts.length === 0) return { slug: null, filePath: null };
-    return { slug: parts[0], filePath: parts.slice(1).join('/') || null };
+    return { mode: 'scrape', slug: parts[0], filePath: parts.slice(1).join('/') || null };
   }
 
   function makeRoute(slug, filePath) {
@@ -1543,13 +1742,50 @@
     updateSelectedCount();
   }
 
+  function clearConsoleOutput() {
+    consoleEl.innerHTML = '<div class="empty-console" id="emptyMsg">// Console output will appear here</div>';
+    logLines = 0;
+    lineCount.textContent = '0 lines';
+  }
+
+  function clearCurrentViewOnly() {
+    state.activeSlug = null;
+    state.activeFilePath = null;
+    state.searchTerm = '';
+    searchInput.value = '';
+    resetSelections();
+    setProgress(0, 0);
+    switchPage('settings');
+    setWizardStep(1);
+    history.replaceState({}, '', '/');
+    renderSiteSelect();
+    renderCounters();
+    renderFileManager();
+  }
+
+  function clearAllScrapedData() {
+    state.scrapes = {};
+    saveScrapes();
+    clearCurrentViewOnly();
+    renderSiteSelect();
+  }
+
   function applyRoute() {
-    const { slug, filePath } = parseRoute(window.location.pathname);
+    const { mode, slug, filePath } = parseRoute(window.location.pathname);
+
+    if (mode === 'updates') {
+      switchPage('updates');
+      return;
+    }
+
     if (!slug || !state.scrapes[slug]) {
       state.activeSlug = null;
       state.activeFilePath = null;
       resetSelections();
       switchPage('settings');
+      if (window.location.pathname !== '/') {
+        history.replaceState({}, '', '/');
+      }
       renderSiteSelect();
       renderCounters();
       renderFileManager();
@@ -1838,9 +2074,27 @@
     setWizardStep(wizardStep + 1);
   });
 
-  tabSettings.addEventListener('click', () => switchPage('settings'));
-  tabFiles.addEventListener('click', () => switchPage('files'));
-  tabConsole.addEventListener('click', () => switchPage('console'));
+  tabSettings.addEventListener('click', () => {
+    history.pushState({}, '', '/');
+    switchPage('settings');
+  });
+  tabFiles.addEventListener('click', () => {
+    if (state.activeSlug) {
+      history.pushState({}, '', state.activeFilePath ? makeRoute(state.activeSlug, state.activeFilePath) : `/${encodeURIComponent(state.activeSlug)}`);
+      switchPage('files');
+    } else {
+      history.pushState({}, '', '/');
+      switchPage('files');
+    }
+  });
+  tabConsole.addEventListener('click', () => {
+    history.pushState({}, '', '/');
+    switchPage('console');
+  });
+  tabUpdates.addEventListener('click', () => {
+    history.pushState({}, '', '/updates');
+    switchPage('updates');
+  });
 
   downloadCurrentBtn.addEventListener('click', downloadCurrentFile);
   downloadAllBtn.addEventListener('click', () => {
@@ -1893,9 +2147,9 @@
   });
 
   clearBtn.addEventListener('click', () => {
-    consoleEl.innerHTML = '<div class="empty-console" id="emptyMsg">// Console output will appear here</div>';
-    logLines = 0;
-    lineCount.textContent = '0 lines';
+    clearConsoleOutput();
+    clearCurrentViewOnly();
+    log('Cleared current view and reset route to home.', 'warn');
   });
 
   resetStatsBtn.addEventListener('click', () => {
@@ -1907,7 +2161,7 @@
     saveScrapes();
     state.activeSlug = null;
     state.activeFilePath = null;
-    history.pushState({}, '', '/');
+    history.replaceState({}, '', '/');
     setProgress(0, 0);
     renderSiteSelect();
     renderCounters();
@@ -1983,14 +2237,55 @@
 
   window.addEventListener('popstate', applyRoute);
 
+  async function handleRefreshRestoreFlow() {
+    const nav = performance.getEntriesByType('navigation')[0];
+    const isReload = nav && nav.type === 'reload';
+    const hasScrapes = Object.keys(state.scrapes).length > 0;
+    if (!isReload || !hasScrapes) {
+      return;
+    }
+
+    const shouldRestore = await showConfirmDialog({
+      title: 'Restore Original Scrape?',
+      message: 'Would you like to restore your original scrape session after this refresh?',
+      confirmText: 'Yes, Restore',
+      cancelText: 'No',
+    });
+
+    if (shouldRestore) {
+      log('Restored previous scrape session.', 'success');
+      return;
+    }
+
+    const shouldDelete = await showConfirmDialog({
+      title: 'Are You Sure?',
+      message: 'If you continue, everything you scraped or changed will be permanently deleted.',
+      confirmText: 'Delete Everything',
+      cancelText: 'Keep It',
+      confirmTone: 'danger',
+    });
+
+    if (shouldDelete) {
+      clearAllScrapedData();
+      clearConsoleOutput();
+      log('All scraped data permanently deleted.', 'warn');
+      return;
+    }
+
+    log('Kept previous scrape session.', 'success');
+  }
+
   loadPrefs();
   currentStorageKey = safeStorageKey();
   state.scrapes = loadScrapes(currentStorageKey);
+  updatesVersion.textContent = `Version: ${APP_VERSION}`;
   log('ChroniumX initialized in scraper mode.', 'dim');
   switchPage('settings');
   setWizardStep(1);
   renderSiteSelect();
-  applyRoute();
+  handleRefreshRestoreFlow().then(() => {
+    applyRoute();
+  });
 </script>
 </body>
 </html>
