@@ -359,6 +359,12 @@
         <div class="hint">Set this to your real analytics count (human visits)</div>
       </div>
 
+      <div class="field">
+        <label>Global Counter Key</label>
+        <input type="text" id="counterKeyInput" value="sitjd-vercel-app" />
+        <div class="hint">Use the same key on every device to share one global test counter</div>
+      </div>
+
       <!-- Status bar -->
       <div class="status-wrap">
         <div class="status-label">
@@ -375,7 +381,7 @@
           <div class="counter-value" id="realCount">0</div>
         </div>
         <div class="counter-card">
-          <div class="counter-label">Test/Bot Visits</div>
+          <div class="counter-label">Global Test/Bot Visits</div>
           <div class="counter-value" id="botCount">0</div>
         </div>
         <div class="counter-card">
@@ -415,6 +421,7 @@
   const countInput = document.getElementById('countInput');
   const delayInput = document.getElementById('delayInput');
   const realInput  = document.getElementById('realInput');
+  const counterKeyInput = document.getElementById('counterKeyInput');
   const startBtn   = document.getElementById('startBtn');
   const clearBtn   = document.getElementById('clearBtn');
   const resetStatsBtn = document.getElementById('resetStatsBtn');
@@ -430,7 +437,9 @@
   let running = false;
   let logLines = 0;
   const STATS_KEY = 'chroniumx.visitStats.v1';
-  let visitStats = { real: 0, bot: 0 };
+  const GLOBAL_NAMESPACE = 'chroniumx';
+  let visitStats = { real: 0, counterKey: 'sitjd-vercel-app' };
+  let globalBotCount = 0;
 
   /* ── Helpers ─────────────────────────────── */
   function timestamp() {
@@ -493,12 +502,14 @@
       const raw = localStorage.getItem(STATS_KEY);
       if (!raw) return;
       const parsed = JSON.parse(raw);
-      if (typeof parsed.real === 'number' && typeof parsed.bot === 'number') {
+      if (typeof parsed.real === 'number') {
         visitStats.real = Math.max(0, Math.floor(parsed.real));
-        visitStats.bot = Math.max(0, Math.floor(parsed.bot));
+      }
+      if (typeof parsed.counterKey === 'string' && parsed.counterKey.trim()) {
+        visitStats.counterKey = parsed.counterKey.trim();
       }
     } catch {
-      visitStats = { real: 0, bot: 0 };
+      visitStats = { real: 0, counterKey: 'sitjd-vercel-app' };
     }
   }
 
@@ -507,11 +518,72 @@
   }
 
   function renderStats() {
-    const total = visitStats.real + visitStats.bot;
+    const total = visitStats.real + globalBotCount;
     realCountEl.textContent = String(visitStats.real);
-    botCountEl.textContent = String(visitStats.bot);
+    botCountEl.textContent = String(globalBotCount);
     totalCountEl.textContent = String(total);
     realInput.value = String(visitStats.real);
+    counterKeyInput.value = visitStats.counterKey;
+  }
+
+  function safeCounterKey() {
+    return (visitStats.counterKey || 'sitjd-vercel-app')
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '-')
+      .replace(/-+/g, '-')
+      .replace(/^-|-$/g, '') || 'sitjd-vercel-app';
+  }
+
+  async function syncGlobalCounter() {
+    const key = safeCounterKey();
+    const endpoint = `https://api.countapi.xyz/get/${GLOBAL_NAMESPACE}/${key}`;
+    try {
+      const res = await fetch(endpoint, { cache: 'no-store' });
+      const data = await res.json();
+      if (typeof data.value === 'number') {
+        globalBotCount = Math.max(0, Math.floor(data.value));
+      } else {
+        globalBotCount = 0;
+      }
+      renderStats();
+      log(`Global counter synced for key "${key}".`, 'num');
+    } catch {
+      log('Could not sync global counter right now.', 'warn');
+    }
+  }
+
+  async function incrementGlobalCounter() {
+    const key = safeCounterKey();
+    const endpoint = `https://api.countapi.xyz/hit/${GLOBAL_NAMESPACE}/${key}`;
+    try {
+      const res = await fetch(endpoint, { cache: 'no-store' });
+      const data = await res.json();
+      if (typeof data.value === 'number') {
+        globalBotCount = Math.max(0, Math.floor(data.value));
+      }
+    } catch {
+      globalBotCount += 1;
+      log('Global counter API unavailable, showing local fallback increment.', 'warn');
+    }
+    renderStats();
+  }
+
+  async function resetGlobalCounter() {
+    const key = safeCounterKey();
+    const endpoint = `https://api.countapi.xyz/set/${GLOBAL_NAMESPACE}/${key}?value=0`;
+    try {
+      const res = await fetch(endpoint, { cache: 'no-store' });
+      const data = await res.json();
+      if (typeof data.value === 'number') {
+        globalBotCount = Math.max(0, Math.floor(data.value));
+      } else {
+        globalBotCount = 0;
+      }
+      renderStats();
+      log(`Global counter reset for key "${key}".`, 'warn');
+    } catch {
+      log('Could not reset global counter right now.', 'error');
+    }
   }
 
   /* ── Hidden iframe container ───────────────── */
@@ -527,12 +599,13 @@
       const iframe = document.createElement('iframe');
       iframe.sandbox = 'allow-scripts allow-same-origin';
       iframe.referrerPolicy = 'no-referrer';
+      let settled = false;
 
-      const done = (status) => {
+      const done = async (status) => {
+        if (settled) return;
+        settled = true;
         const ms = Math.round(performance.now() - start);
-        visitStats.bot += 1;
-        saveStats();
-        renderStats();
+        await incrementGlobalCounter();
         if (status === 'ok') {
           log(`Test visit ${index} loaded  (${ms} ms)`, 'success');
         } else {
@@ -588,6 +661,7 @@
     log(`Test hits:  ${count}`, 'num');
     log(`Delay    :  ${delay} ms`, 'num');
     log(`Real base:  ${visitStats.real}`, 'num');
+    log(`Global key: ${safeCounterKey()}`, 'num');
     log('─'.repeat(48), 'dim');
 
     for (let i = 1; i <= count; i++) {
@@ -602,7 +676,7 @@
 
     log('─'.repeat(48), 'dim');
     log(`Session complete  —  ${count} test visit${count !== 1 ? 's' : ''} sent.`, 'success');
-    log(`Totals now  —  real ${visitStats.real}, bot ${visitStats.bot}, total ${visitStats.real + visitStats.bot}`, 'num');
+    log(`Totals now  —  real ${visitStats.real}, bot ${globalBotCount}, total ${visitStats.real + globalBotCount}`, 'num');
     log('─'.repeat(48), 'dim');
 
     running = false;
@@ -623,10 +697,11 @@
   });
 
   resetStatsBtn.addEventListener('click', () => {
-    visitStats = { real: 0, bot: 0 };
+    visitStats.real = 0;
     saveStats();
     renderStats();
-    log('Visit counters reset to 0.', 'warn');
+    resetGlobalCounter();
+    log('Local real baseline reset to 0.', 'warn');
   });
 
   realInput.addEventListener('change', () => {
@@ -635,6 +710,15 @@
     saveStats();
     renderStats();
     log(`Real visits baseline set to ${v}.`, 'num');
+  });
+
+  counterKeyInput.addEventListener('change', () => {
+    const cleaned = (counterKeyInput.value || '').trim();
+    visitStats.counterKey = cleaned || 'sitjd-vercel-app';
+    saveStats();
+    renderStats();
+    log(`Global counter key set to "${safeCounterKey()}".`, 'num');
+    syncGlobalCounter();
   });
 
   /* clamp inputs live */
@@ -646,6 +730,7 @@
 
   loadStats();
   renderStats();
+  syncGlobalCounter();
 </script>
 </body>
 </html>
