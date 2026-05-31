@@ -108,6 +108,188 @@
       min-width: 110px;
     }
 
+    .boot-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 999;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background:
+        radial-gradient(circle at top, rgba(255, 255, 255, 0.06), transparent 36%),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 28%),
+        #060606;
+      overflow: hidden;
+      transition: opacity .8s ease, visibility .8s ease;
+    }
+
+    .boot-screen::before,
+    .boot-screen::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .boot-screen::before {
+      background: linear-gradient(180deg, transparent 0%, rgba(255, 255, 255, 0.035) 48%, transparent 100%);
+      transform: translateY(-100%);
+      animation: boot-scan 3.4s linear infinite;
+    }
+
+    .boot-screen::after {
+      background: repeating-linear-gradient(180deg, rgba(255, 255, 255, 0.03) 0 1px, transparent 1px 4px);
+      opacity: .2;
+    }
+
+    .boot-screen.hidden {
+      opacity: 0;
+      visibility: hidden;
+    }
+
+    .boot-card {
+      position: relative;
+      width: min(680px, 100%);
+      border: 1px solid var(--border2);
+      background: rgba(10, 10, 10, 0.94);
+      box-shadow: 0 20px 80px rgba(0, 0, 0, 0.55);
+      overflow: hidden;
+    }
+
+    .boot-card::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      pointer-events: none;
+    }
+
+    .boot-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: .66rem;
+      color: var(--muted);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .boot-dots {
+      display: flex;
+      gap: 6px;
+    }
+
+    .boot-dots span {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #2b2b2b;
+    }
+
+    .boot-body {
+      position: relative;
+      padding: 26px 24px 24px;
+      min-height: 320px;
+    }
+
+    .boot-kicker {
+      color: var(--muted);
+      font-size: .62rem;
+      letter-spacing: .24em;
+      text-transform: uppercase;
+      margin-bottom: 18px;
+    }
+
+    .boot-title {
+      font-size: clamp(1.6rem, 5vw, 3rem);
+      letter-spacing: .18em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 18px;
+      min-height: 1.3em;
+      white-space: nowrap;
+    }
+
+    .boot-subtitle {
+      min-height: 1.4em;
+      font-size: .82rem;
+      color: #b9b9b9;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      margin-bottom: 20px;
+      white-space: nowrap;
+    }
+
+    .boot-title::after,
+    .boot-subtitle::after {
+      content: '_';
+      display: inline-block;
+      margin-left: 2px;
+      animation: boot-cursor .9s steps(1) infinite;
+    }
+
+    .boot-subtitle.done::after,
+    .boot-title.done::after {
+      opacity: 0;
+    }
+
+    .boot-log {
+      display: grid;
+      gap: 9px;
+      padding: 14px 16px;
+      border: 1px solid var(--border);
+      background: #0b0b0b;
+      min-height: 118px;
+    }
+
+    .boot-log-line {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      font-size: .72rem;
+      color: #a8a8a8;
+      opacity: 0;
+      transform: translateY(6px);
+      transition: opacity .28s ease, transform .28s ease;
+    }
+
+    .boot-log-line.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .boot-log-time {
+      color: var(--c-time);
+      min-width: 58px;
+    }
+
+    .boot-log-text {
+      color: #cfcfcf;
+      letter-spacing: .05em;
+    }
+
+    .boot-log-text strong {
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    @keyframes boot-scan {
+      to {
+        transform: translateY(100%);
+      }
+    }
+
+    @keyframes boot-cursor {
+      50% {
+        opacity: 0;
+      }
+    }
+
     .mini-btn.active {
       border-color: var(--accent);
       color: var(--text);
@@ -931,6 +1113,29 @@
 </head>
 <body>
 
+  <div class="boot-screen" id="bootScreen" aria-live="polite" aria-label="ChroniumX loading screen">
+    <div class="boot-card">
+      <div class="boot-topbar">
+        <span>ChroniumX Boot Sequence</span>
+        <div class="boot-dots" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+      <div class="boot-body">
+        <div class="boot-kicker">Initializing Interface</div>
+        <div class="boot-title" id="bootTitle"></div>
+        <div class="boot-subtitle" id="bootSubtitle"></div>
+        <div class="boot-log" id="bootLog">
+          <div class="boot-log-line"><span class="boot-log-time">00:01</span><span class="boot-log-text">Mounting <strong>ChroniumX</strong> core...</span></div>
+          <div class="boot-log-line"><span class="boot-log-time">00:02</span><span class="boot-log-text">Loading scraper panels and live preview systems...</span></div>
+          <div class="boot-log-line"><span class="boot-log-time">00:03</span><span class="boot-log-text">Authenticating terminal aesthetic... <strong>Welcome!</strong></span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <header>
     <h1>ChroniumX</h1>
     <p>Website Source Scraper &mdash; HTML, CSS, JS</p>
@@ -1005,6 +1210,11 @@
             <input type="checkbox" id="sameOriginAssetsInput" checked />
             Same-origin assets only
           </label>
+          <label class="notice" style="display:flex;align-items:center;gap:8px;border-left:0;padding-left:0;margin-top:8px;">
+            <input type="checkbox" id="jsRenderInput" checked />
+            JavaScript render mode
+          </label>
+          <div class="hint">Uses optional remote renderer support for JS-heavy pages</div>
         </div>
       </div>
 
@@ -1164,6 +1374,7 @@
         <div class="updates-item">Added folder tree grouping plus per-file/folder/site export options.</div>
         <div class="updates-item">Added live crawl progress updates during scrape.</div>
         <div class="updates-item">Moved Live Preview into its own dedicated tab with empty-state handling when no code is scraped.</div>
+        <div class="updates-item">Added JavaScript render mode option for stronger scraping on modern JS-heavy websites.</div>
       </div>
     </div>
   </div>
@@ -1201,10 +1412,15 @@
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
   const urlInput = document.getElementById('urlInput');
+  const bootScreen = document.getElementById('bootScreen');
+  const bootTitle = document.getElementById('bootTitle');
+  const bootSubtitle = document.getElementById('bootSubtitle');
+  const bootLog = document.getElementById('bootLog');
   const countInput = document.getElementById('countInput');
   const delayInput = document.getElementById('delayInput');
   const depthInput = document.getElementById('depthInput');
   const sameOriginAssetsInput = document.getElementById('sameOriginAssetsInput');
+  const jsRenderInput = document.getElementById('jsRenderInput');
   const typeHtmlInput = document.getElementById('typeHtmlInput');
   const typeCssInput = document.getElementById('typeCssInput');
   const typeJsInput = document.getElementById('typeJsInput');
@@ -1260,7 +1476,7 @@
 
   let running = false;
   let logLines = 0;
-  const APP_VERSION = 'v.2.5.0';
+  const APP_VERSION = 'v.2.6.0';
   const PREFS_KEY = 'chroniumx.scraperPrefs.v1';
   let currentStorageKey = 'sourcevault.scrapes.v1';
   let wizardStep = 1;
@@ -1276,6 +1492,46 @@
   let pageLoadToken = 0;
   let previewBlobUrl = null;
   let previewAssetUrls = [];
+
+  function wait(ms) {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
+  async function typeBootText(element, text, speed = 42) {
+    element.textContent = '';
+    for (const char of text) {
+      element.textContent += char;
+      await wait(speed);
+    }
+    element.classList.add('done');
+  }
+
+  async function playBootSequence() {
+    if (!bootScreen) return;
+
+    document.body.style.overflow = 'hidden';
+    const lines = Array.from(bootLog.querySelectorAll('.boot-log-line'));
+
+    const lineTask = (async () => {
+      for (const line of lines) {
+        await wait(220);
+        line.classList.add('visible');
+      }
+    })();
+
+    await wait(120);
+    await typeBootText(bootTitle, 'WELCOME!', 68);
+    await wait(120);
+    await typeBootText(bootSubtitle, 'Entering ChroniumX terminal...', 26);
+    await lineTask;
+    await wait(520);
+
+    bootScreen.classList.add('hidden');
+    await wait(820);
+    document.body.style.overflow = '';
+  }
 
   const tagMap = {
     info: '[INFO]',
@@ -1500,6 +1756,7 @@
       customSlug: (realInput.value || '').trim(),
       depth: depthInput.value,
       sameOriginAssetsOnly: sameOriginAssetsInput.checked,
+      jsRender: jsRenderInput.checked,
       fileTypes: {
         html: typeHtmlInput.checked,
         css: typeCssInput.checked,
@@ -1529,6 +1786,9 @@
         }
         if (typeof prefs.sameOriginAssetsOnly === 'boolean') {
           sameOriginAssetsInput.checked = prefs.sameOriginAssetsOnly;
+        }
+        if (typeof prefs.jsRender === 'boolean') {
+          jsRenderInput.checked = prefs.jsRender;
         }
         if (prefs.fileTypes && typeof prefs.fileTypes === 'object') {
           if (typeof prefs.fileTypes.html === 'boolean') typeHtmlInput.checked = prefs.fileTypes.html;
@@ -1654,7 +1914,9 @@
 
     const files = filesForActive();
     if (!state.activeFilePath || !currentFile()) {
-      state.activeFilePath = files[0] ? files[0].path : null;
+      const topIndex = files.find((file) => String(file.path).toLowerCase() === 'index.html');
+      const nestedIndex = files.find((file) => String(file.path).toLowerCase().endsWith('/index.html'));
+      state.activeFilePath = (topIndex || nestedIndex || files[0] || {}).path || null;
     }
   }
 
@@ -2266,6 +2528,9 @@
   function pickInitialFile(scrapeFiles) {
     const preferred = (verifyEndpointInput.value || '').trim();
     if (preferred && scrapeFiles[preferred]) return preferred;
+    if (scrapeFiles['index.html']) return 'index.html';
+    const nestedIndex = Object.keys(scrapeFiles).sort().find((path) => path.toLowerCase().endsWith('/index.html'));
+    if (nestedIndex) return nestedIndex;
     return Object.keys(scrapeFiles).sort()[0] || null;
   }
 
@@ -2326,6 +2591,7 @@
     log(`Max assets  : ${maxAssets}`, 'num');
     log(`Max depth   : ${maxDepth}`, 'num');
     log(`Same-origin : ${sameOriginAssetsInput.checked ? 'assets only' : 'all assets'}`, 'num');
+    log(`JS render   : ${jsRenderInput.checked ? 'enabled' : 'disabled'}`, 'num');
     log('No bot traffic will be sent.', 'success');
 
     try {
@@ -2338,6 +2604,7 @@
           maxAssets,
           maxDepth,
           sameOriginAssetsOnly: sameOriginAssetsInput.checked,
+          renderJs: jsRenderInput.checked,
         }),
       });
 
@@ -2373,7 +2640,7 @@
               pagesVisited: event.pagesVisited,
               assetsProcessed: event.assetsProcessed,
             });
-            log(`Page ${event.pagesVisited}/${event.pageLimit}: ${event.url}`, event.error ? 'warn' : 'num');
+            log(`Page ${event.pagesVisited}/${event.pageLimit}: ${event.url}${event.rendered ? ' [JS rendered]' : ''}`, event.error ? 'warn' : 'num');
             if (event.error) {
               log(`Page warning: ${event.error}`, 'warn');
             }
@@ -2557,7 +2824,7 @@
     savePrefs();
   });
 
-  [depthInput, sameOriginAssetsInput, typeHtmlInput, typeCssInput, typeJsInput].forEach((input) => {
+  [depthInput, sameOriginAssetsInput, jsRenderInput, typeHtmlInput, typeCssInput, typeJsInput].forEach((input) => {
     input.addEventListener('change', () => {
       savePrefs();
       renderFileManager();
@@ -2652,8 +2919,10 @@
   switchPage('settings', { withLoader: false });
   setWizardStep(1);
   renderSiteSelect();
-  handleRefreshRestoreFlow().then(() => {
-    applyRoute();
+  playBootSequence().then(() => {
+    handleRefreshRestoreFlow().then(() => {
+      applyRoute();
+    });
   });
 </script>
 </body>
