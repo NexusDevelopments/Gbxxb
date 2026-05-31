@@ -288,7 +288,7 @@
 
       <div class="field">
         <label>Target URL</label>
-        <input type="url" id="urlInput" placeholder="https://example.com" />
+        <input type="url" id="urlInput" placeholder="https://example.com" value="https://sitjd.vercel.app/" />
       </div>
 
       <div class="row">
@@ -406,22 +406,39 @@
     return new Promise(r => setTimeout(r, ms));
   }
 
-  /* ── Send visit ──────────────────────────── */
-  async function sendVisit(url, index, total) {
-    log(`Sending visit ${index} of ${total}  →  ${url}`, 'sent');
-    try {
+  /* ── Hidden iframe container ───────────────── */
+  const iframeBox = document.createElement('div');
+  iframeBox.style.cssText = 'position:fixed;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;top:-9999px;left:-9999px;';
+  document.body.appendChild(iframeBox);
+
+  /* ── Send visit via real iframe load ──────── */
+  function sendVisit(url, index, total) {
+    return new Promise((resolve) => {
+      log(`Sending visit ${index} of ${total}  →  ${url}`, 'sent');
       const start = performance.now();
-      await fetch(url, {
-        method: 'GET',
-        mode: 'no-cors',
-        cache: 'no-store',
-        credentials: 'omit',
-      });
-      const ms = Math.round(performance.now() - start);
-      log(`Visit ${index} dispatched  (${ms} ms)`, 'success');
-    } catch (err) {
-      log(`Visit ${index} failed  —  ${err.message}`, 'error');
-    }
+      const iframe = document.createElement('iframe');
+      iframe.sandbox = 'allow-scripts allow-same-origin';
+      iframe.referrerPolicy = 'no-referrer';
+
+      const done = (status) => {
+        const ms = Math.round(performance.now() - start);
+        if (status === 'ok') {
+          log(`Visit ${index} loaded  (${ms} ms)`, 'success');
+        } else {
+          log(`Visit ${index} timed out / blocked  (${ms} ms)`, 'warn');
+        }
+        iframe.remove();
+        resolve();
+      };
+
+      // Fallback timeout — some sites block iframes, still counts as a hit
+      const timer = setTimeout(() => done('timeout'), 12000);
+      iframe.onload  = () => { clearTimeout(timer); done('ok'); };
+      iframe.onerror = () => { clearTimeout(timer); done('timeout'); };
+
+      iframe.src = url + (url.includes('?') ? '&' : '?') + '_v=' + Date.now();
+      iframeBox.appendChild(iframe);
+    });
   }
 
   /* ── Main routine ────────────────────────── */
