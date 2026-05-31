@@ -1449,6 +1449,7 @@
         <div class="updates-item">Added Renderer Health panel, Scrape Quality report, and rendered snapshot preview mode controls.</div>
         <div class="updates-item">Boosted CSS scraping for JS-heavy sites with rendered-page link extraction, inline style capture, and content-based CSS detection.</div>
         <div class="updates-item">Target URL now auto-configures crawl settings (pages/assets/depth/render profile) based on detected site type.</div>
+        <div class="updates-item">Added deep code discovery for JS-heavy frameworks (React/Next/Vite/Webpack): captures chunk chains, JSON manifests, source maps, and extracted source-map source files.</div>
       </div>
     </div>
   </div>
@@ -1562,7 +1563,7 @@
 
   let running = false;
   let logLines = 0;
-  const APP_VERSION = 'v.3.0.0';
+  const APP_VERSION = 'v.3.1.0';
   const PREFS_KEY = 'chroniumx.scraperPrefs.v1';
   let currentStorageKey = 'sourcevault.scrapes.v1';
   let wizardStep = 1;

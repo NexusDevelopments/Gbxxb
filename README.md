@@ -6,11 +6,20 @@ ChroniumX is a focused website source scraper built to collect and organize fron
 
 - Crawls a target website from a starting URL.
 - Collects source files for HTML pages plus linked CSS and JavaScript assets.
+- Discovers deeper framework code links inside fetched files (dynamic imports, chunk references, `sourceMappingURL`, CSS `url()` links, and quoted bundle paths).
+- Captures additional code-oriented assets such as JSON manifests and source map (`.map`) files when available.
+- Extracts `sourcesContent` from source maps into separate files so bundled React/Next/Vite/Webpack output can include recoverable source modules.
 - Tracks crawl progress in real time while pages and assets are processed.
 - Organizes results into a built-in file manager with folder grouping and search.
 - Supports route-based file viewing, including paths like `/{site-slug}/{file-path}`.
 - Saves scrape sessions in browser storage so previously captured sites can be reopened.
 - Exports scraped content as single files, selected files, folders, full ZIP bundles, and JSON manifest data.
+
+## JS-Heavy Site Notes
+
+- Most modern sites ship compiled bundles, not full original project trees. ChroniumX now follows bundle chains more aggressively to recover as much code as possible.
+- If a site exposes source maps with `sourcesContent`, ChroniumX can recover many original module files (for example `.ts`, `.tsx`, `.jsx`) from those maps.
+- If source maps are disabled, private, or stripped, only compiled assets can be captured. This is a server-side publishing constraint, not a scraper limitation.
 
 ## What Is Used
 

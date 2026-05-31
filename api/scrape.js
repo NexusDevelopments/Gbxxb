@@ -3,8 +3,10 @@ const MAX_ASSETS = 1000;
 const MAX_FILE_CHARS = 200_000;
 const MAX_RENDER_SNAPSHOT_CHARS = 160_000;
 const MAX_TOTAL_CHARS = 2_000_000;
+const MAX_DISCOVERED_ASSETS = 6000;
 const FETCH_TIMEOUT_MS = 12_000;
 const RENDER_TIMEOUT_MS = 20_000;
+const CODE_ASSET_TYPES = new Set(["css", "js", "json", "map"]);
 
 function json(status, payload) {
   return {
@@ -64,7 +66,9 @@ function detectType(pathname) {
 
   if (lower.endsWith(".html") || lower.endsWith(".htm")) return "html";
   if (lower.endsWith(".css")) return "css";
-  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs")) return "js";
+  if (lower.endsWith(".js") || lower.endsWith(".mjs") || lower.endsWith(".cjs") || lower.endsWith(".jsx") || lower.endsWith(".ts") || lower.endsWith(".tsx")) return "js";
+  if (lower.endsWith(".map")) return "map";
+  if (lower.endsWith(".json")) return "json";
   return "text";
 }
 
@@ -86,14 +90,23 @@ function makeInlineCssPath(pagePath, index, suffix = "") {
 
 function inferAssetType(assetPath, contentType, text) {
   const pathType = detectType(assetPath);
-  if (pathType === "css" || pathType === "js") return pathType;
+  if (pathType === "css" || pathType === "js" || pathType === "json" || pathType === "map") return pathType;
 
   const ct = String(contentType || "").toLowerCase();
   if (ct.includes("text/css")) return "css";
   if (ct.includes("javascript") || ct.includes("ecmascript") || ct.includes("application/x-javascript")) return "js";
+  if (ct.includes("application/json") || ct.includes("text/json")) return "json";
+  if (ct.includes("application/source-map")) return "map";
 
   const body = String(text || "").trim();
   if (!body) return "text";
+
+  if (/^\s*\{[\s\S]*"version"\s*:\s*3[\s\S]*"sources"\s*:\s*\[/.test(body)) {
+    return "map";
+  }
+  if (/^\s*[{[]/.test(body) && /"(?:files|chunks|entrypoints|buildId|routes|imports|exports)"/.test(body)) {
+    return "json";
+  }
 
   if (/@(?:import|media|font-face|supports|keyframes)\b/.test(body) || /\{[^{}]{0,200}:[^{}]{0,200};/.test(body)) {
     return "css";
@@ -125,6 +138,7 @@ function extractLinks(html, pageUrl) {
   const importFromRe = /\bfrom\s*["']([^"']+)["']/gi;
   const dynamicImportRe = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/gi;
   const cssUrlRe = /url\(\s*["']?([^"')]+)["']?\s*\)/gi;
+  const quotedCodePathRe = /["']([^"'\s]+\.(?:js|mjs|cjs|jsx|ts|tsx|css|json|map)(?:\?[^"'\s]*)?)["']/gi;
 
   let match;
 
@@ -156,6 +170,10 @@ function extractLinks(html, pageUrl) {
     assetLinks.push(match[1]);
   }
 
+  while ((match = quotedCodePathRe.exec(html)) !== null) {
+    assetLinks.push(match[1]);
+  }
+
   const toAbsolute = (value) => {
     try {
       return new URL(value, pageUrl).toString();
@@ -170,6 +188,90 @@ function extractLinks(html, pageUrl) {
   };
 }
 
+function extractAssetLinksFromCode(text, baseUrl) {
+  const links = new Set();
+  const body = String(text || "");
+  const pushLink = (value) => {
+    const raw = String(value || "").trim();
+    if (!raw) return;
+    if (/^(?:data:|blob:|javascript:|mailto:|tel:)/i.test(raw)) return;
+    try {
+      const absolute = new URL(raw, baseUrl).toString();
+      if (/^https?:\/\//i.test(absolute)) {
+        links.add(absolute);
+      }
+    } catch {
+      // Ignore malformed link patterns.
+    }
+  };
+
+  const sourceMapRe = /[#@]\s*sourceMappingURL\s*=\s*([^\s*]+)\s*$/gmi;
+  const importFromRe = /\bfrom\s*["']([^"']+)["']/gi;
+  const dynamicImportRe = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/gi;
+  const cssUrlRe = /url\(\s*["']?([^"')]+)["']?\s*\)/gi;
+  const quotedCodePathRe = /["'`]([^"'`\s]+\.(?:js|mjs|cjs|jsx|ts|tsx|css|json|map)(?:\?[^"'`\s]*)?)["'`]/gi;
+
+  let match;
+  while ((match = sourceMapRe.exec(body)) !== null) pushLink(match[1]);
+  while ((match = importFromRe.exec(body)) !== null) pushLink(match[1]);
+  while ((match = dynamicImportRe.exec(body)) !== null) pushLink(match[1]);
+  while ((match = cssUrlRe.exec(body)) !== null) pushLink(match[1]);
+  while ((match = quotedCodePathRe.exec(body)) !== null) pushLink(match[1]);
+
+  return Array.from(links);
+}
+
+function saveSourceMapSources(filesMap, mapAssetPath, mapUrl, mapText, counters, warnings) {
+  let parsed;
+  try {
+    parsed = JSON.parse(String(mapText || ""));
+  } catch {
+    return 0;
+  }
+
+  const sources = Array.isArray(parsed.sources) ? parsed.sources : [];
+  const contents = Array.isArray(parsed.sourcesContent) ? parsed.sourcesContent : [];
+  if (sources.length === 0 || contents.length === 0) return 0;
+
+  const mapPrefix = String(mapAssetPath || "map")
+    .replace(/^\/+/, "")
+    .replace(/[^a-z0-9._/-]+/gi, "_")
+    .replace(/\.+\//g, "");
+
+  let saved = 0;
+  for (let i = 0; i < sources.length; i += 1) {
+    const sourceName = String(sources[i] || `source-${i + 1}.txt`)
+      .replace(/^webpack:\/\//i, "")
+      .replace(/^file:\/\//i, "")
+      .replace(/^\/+/, "")
+      .replace(/\.+\//g, "")
+      .replace(/[^a-z0-9._/-]+/gi, "_");
+
+    const sourceContent = typeof contents[i] === "string" ? contents[i] : "";
+    if (!sourceContent) continue;
+
+    const fallbackName = `source-${i + 1}.txt`;
+    const normalizedName = sourceName || fallbackName;
+    const sourcePath = `sourcemaps/${mapPrefix}/${normalizedName}`;
+    const sourceType = detectType(normalizedName) === "text" ? "js" : detectType(normalizedName);
+
+    pushFile(
+      filesMap,
+      {
+        path: sourcePath,
+        type: sourceType,
+        sourceUrl: `${mapUrl}#source-${i + 1}`,
+        content: sourceContent,
+      },
+      counters,
+      warnings
+    );
+    saved += 1;
+  }
+
+  return saved;
+}
+
 async function fetchText(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
@@ -180,7 +282,7 @@ async function fetchText(url) {
       redirect: "follow",
       headers: {
         "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36",
-        accept: "text/html,text/css,application/javascript,text/javascript,*/*;q=0.1",
+        accept: "text/html,text/css,application/javascript,text/javascript,application/json,application/source-map,*/*;q=0.1",
         "accept-language": "en-US,en;q=0.9",
         "cache-control": "no-cache",
         pragma: "no-cache",
@@ -457,6 +559,8 @@ module.exports = async function handler(req, res) {
   };
   let fetchedAssets = 0;
   let processedAssets = 0;
+  let discoveredFromCode = 0;
+  let sourceMapSourcesSaved = 0;
 
   const sendEvent = (event) => {
     res.write(`${JSON.stringify(event)}\n`);
@@ -582,6 +686,7 @@ module.exports = async function handler(req, res) {
       }
 
       for (const assetLink of assetLinks) {
+        if (seenAssets.size >= MAX_DISCOVERED_ASSETS) break;
         if (seenAssets.has(assetLink)) continue;
         seenAssets.add(assetLink);
         assetQueue.push(assetLink);
@@ -657,7 +762,7 @@ module.exports = async function handler(req, res) {
       const lowerContentType = contentType.toLowerCase();
 
       const inferredType = inferAssetType(assetPath, lowerContentType, text);
-      if (!(inferredType === "css" || inferredType === "js")) {
+      if (!CODE_ASSET_TYPES.has(inferredType)) {
         sendEvent({
           type: "asset",
           url: assetUrl,
@@ -682,6 +787,20 @@ module.exports = async function handler(req, res) {
         warnings
       );
       fetchedAssets += 1;
+
+      if (inferredType === "map") {
+        sourceMapSourcesSaved += saveSourceMapSources(filesMap, assetPath, assetUrl, text, counters, warnings);
+      }
+
+      const nestedAssetLinks = extractAssetLinksFromCode(text, assetUrl);
+      for (const nestedAssetLink of nestedAssetLinks) {
+        if (seenAssets.size >= MAX_DISCOVERED_ASSETS) break;
+        if (seenAssets.has(nestedAssetLink)) continue;
+        seenAssets.add(nestedAssetLink);
+        assetQueue.push(nestedAssetLink);
+        discoveredFromCode += 1;
+      }
+
       sendEvent({
         type: "asset",
         url: assetUrl,
@@ -734,6 +853,8 @@ module.exports = async function handler(req, res) {
       sameOriginAssetsOnly: effectiveSameOriginAssetsOnly,
       renderJs,
       aggressiveProfile: isKnownJsHeavy,
+      discoveredFromCode,
+      sourceMapSourcesSaved,
       renderer: {
         mode: renderJs ? "enabled" : "disabled",
         shellPagesDetected: renderStats.shellPagesDetected,
